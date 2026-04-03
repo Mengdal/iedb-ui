@@ -1,0 +1,177 @@
+.mqtt-toolbar {
+  justify-content: flex-end;
+  flex: 1;
+}
+
+.mqtt-section-left {
+  min-width: 240px;
+  max-width: 460px;
+}
+
+.mqtt-desc {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mqtt-broker-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+  max-width: 240px;
+  vertical-align: bottom;
+}
+
+.plugins-mqtt-page .tokens-table {
+  table-layout: fixed;
+}
+
+/* Balanced column widths (7 columns) */
+.plugins-mqtt-page .mqtt-col-name { width: 12%; }
+.plugins-mqtt-page .mqtt-col-db { width: 10%; }
+.plugins-mqtt-page .mqtt-col-topics { width: 26%; }
+.plugins-mqtt-page .mqtt-col-qos { width: 8%; }
+.plugins-mqtt-page .mqtt-col-broker { width: 26%; }
+.plugins-mqtt-page .mqtt-col-status { width: 8%; }
+.plugins-mqtt-page .mqtt-col-actions { width: 10%; }
+
+.plugins-mqtt-page .mqtt-topics-cell {
+  word-break: break-word;
+}
+
+.plugins-mqtt-page .mqtt-topics-cell span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.25;
+}
+
+.plugins-mqtt-page .mqtt-broker-code {
+  max-width: 100%;
+}
+
+.mqtt-topics-cell,
+.mqtt-qos-cell {
+  vertical-align: middle;
+}
+
+.plugins-mqtt-page .tokens-table th:nth-child(4),
+.plugins-mqtt-page .tokens-table td:nth-child(4) {
+  text-align: center;
+}
+
+.mqtt-qos-badge {
+  display: inline;
+  min-width: 0;
+  width: auto;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.mqtt-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  text-transform: lowercase;
+}
+
+.mqtt-status-badge.running {
+  background: rgba(34, 174, 255, 0.14);
+  border-color: rgba(34, 174, 255, 0.35);
+  color: var(--accent-primary);
+}
+
+.mqtt-status-badge.stopped {
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+}
+
+.plugins-mqtt-page .token-actions {
+  /* Override Tokens.css: keep actions column from forcing extra width */
+  min-width: 0;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.plugins-mqtt-page .token-actions .icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+/* Slightly tighter vertical spacing for better scroll visibility */
+.plugins-mqtt-page .tokens-section {
+  margin-top: 16px; /* Tokens.css default is 24px */
+  padding: 20px; /* Tokens.css default is 24px */
+}
+
+.plugins-mqtt-page .section-header {
+  margin-bottom: 16px; /* Tokens.css default is 20px */
+}
+
+/* Ensure modal scroll stays inside modal-body (header remains visible) */
+.plugins-mqtt-page .modal-header {
+  flex-shrink: 0;
+}
+
+.plugins-mqtt-page .modal-content > form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.plugins-mqtt-page .modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.plugins-mqtt-page .modal-actions {
+  flex-shrink: 0;
+}
+
+.plugins-mqtt-page .topic-hint-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: help;
+  user-select: none;
+  vertical-align: middle;
+  position: relative;
+}
+
+/* Make sure error messages wrap and don't get clipped horizontally */
+.plugins-mqtt-page .tokens-alert {
+  width: 100%;
+  box-sizing: border-box;
+  white-space: normal;
+  word-break: break-word;
+}
+

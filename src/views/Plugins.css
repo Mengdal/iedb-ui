@@ -1,0 +1,237 @@
+/* Continuous Queries：主布局与 Tokens 页共用 Tokens.css，此处仅做少量补充 */
+
+select.tokens-search.cq-toolbar-select {
+  cursor: pointer;
+  min-width: 160px;
+}
+
+.cq-toolbar {
+  justify-content: flex-end;
+  flex: 1;
+}
+
+.cq-section-left {
+  min-width: 240px;
+  max-width: 460px;
+}
+
+.cq-desc {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.plugins-cq-page .section-header {
+  align-items: center;
+  gap: 12px;
+}
+
+.plugins-cq-page .cq-toolbar {
+  gap: 8px;
+}
+
+.plugins-cq-page .tokens-table th:nth-child(3),
+.plugins-cq-page .tokens-table td:nth-child(3),
+.plugins-cq-page .tokens-table th:nth-child(4),
+.plugins-cq-page .tokens-table td:nth-child(4) {
+  max-width: 220px;
+  word-break: break-word;
+}
+
+.plugins-cq-page .tokens-table th:nth-child(8),
+.plugins-cq-page .tokens-table td:nth-child(8) {
+  width: 120px;
+  min-width: 120px;
+}
+
+.plugins-cq-page .tokens-table {
+  table-layout: fixed;
+}
+
+.plugins-cq-page .cq-col-name { width: 14%; }
+.plugins-cq-page .cq-col-db { width: 11%; }
+.plugins-cq-page .cq-col-source { width: 16%; }
+.plugins-cq-page .cq-col-destination { width: 16%; }
+.plugins-cq-page .cq-col-interval { width: 9%; }
+.plugins-cq-page .cq-col-status { width: 10%; }
+.plugins-cq-page .cq-col-last-run { width: 12%; }
+.plugins-cq-page .cq-col-actions { width: 12%; }
+
+.plugins-cq-page .token-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.plugins-cq-page .token-actions .icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.plugins-cq-page .token-actions .icon-btn:disabled {
+  opacity: 0.45;
+}
+
+.plugins-cq-page .modal-body {
+  /* Tighter spacing to reduce how much scrolling is needed */
+  padding: 16px 20px;
+}
+
+.plugins-cq-page .form-group {
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+.plugins-cq-page .cq-form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plugins-cq-page .cq-form-two-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .plugins-cq-page .cq-form-two-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.plugins-cq-page .rbac-hint {
+  margin-top: 4px;
+}
+
+.plugins-cq-page .cq-status-switch {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.plugins-cq-page .cq-status-switch:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.plugins-cq-page .cq-toggle-track {
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-color);
+  padding: 2px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.plugins-cq-page .cq-toggle-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.plugins-cq-page .cq-status-switch.on .cq-toggle-track {
+  background: rgba(34, 174, 255, 0.2);
+  border-color: rgba(34, 174, 255, 0.6);
+}
+
+.plugins-cq-page .cq-status-switch.on .cq-toggle-thumb {
+  transform: translateX(16px);
+  background: var(--accent-primary);
+}
+
+.plugins-cq-page .modal-header {
+  flex-shrink: 0;
+}
+
+.plugins-cq-page .modal-content > form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.plugins-cq-page .modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.plugins-cq-page .modal-actions {
+  flex-shrink: 0;
+}
+
+.plugins-cq-page .tokens-alert {
+  width: 100%;
+  box-sizing: border-box;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.plugins-cq-page .cq-success-alert {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.1);
+  color: #86efac;
+}
+
+.plugins-cq-page .cq-desc-input {
+  min-height: 16px;
+}
+
+.plugins-cq-sql {
+  min-height: 260px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0.1px;
+  tab-size: 2;
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(34, 174, 255, 0.25);
+}
+
+.icon-btn.danger:hover {
+  color: #ef4444;
+}
+
+.cq-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cq-history-item {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--bg-base);
+}
+
+.cq-history-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.cq-history-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
