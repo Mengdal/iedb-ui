@@ -6,14 +6,6 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   server: {
-    proxy: {
-      '/__sample_downloads': {
-        target: 'https://docs.influxdata.com',
-        changeOrigin: true,
-        secure: true,
-        rewrite: (path) => path.replace(/^\/__sample_downloads/, '/downloads')
-      }
-    }
   },
   build: {
     rollupOptions: {

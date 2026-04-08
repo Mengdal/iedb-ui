@@ -83,6 +83,7 @@ const Integrations: React.FC = () => {
 
   const handleSaveModal = () => {
     setInstructions(modalInstructions);
+    localStorage.setItem('iotedge-ai-instructions', modalInstructions);
     setIsModalOpen(false);
   };
 

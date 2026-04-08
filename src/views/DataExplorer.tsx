@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, History, Plus, Database, Table2, LineChart, BarChart2, Search, Download, Loader2, Activity, ChevronLeft, ChevronRight, RefreshCw, Sparkles, X } from 'lucide-react';
+import { Play, History, Plus, Database, Table2, LineChart, BarChart2, Search, Download, Loader2, Activity, ChevronLeft, ChevronRight, RefreshCw, Sparkles, X, Clock, Tag, Hash, Filter } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 import { useTranslation } from 'react-i18next';
 import { useServers } from '../contexts/ServerContext';
@@ -116,6 +116,161 @@ const buildChartOption = (type: 'line' | 'bar', result: QueryResponse) => {
   };
 };
 
+export const getSelectedTagValues = (sql: string, column: string): string[] => {
+  if (!sql) return [];
+  const inRegex = new RegExp(`\\b${column}\\s+IN\\s*\\((.*?)\\)`, 'i');
+  const inMatch = sql.match(inRegex);
+  if (inMatch) {
+    return inMatch[1].split(',').map(s => s.trim().replace(/^'(.*)'$/, '$1').replace(/^"(.*)"$/, '$1')).filter(s => s.length > 0);
+  }
+  
+  const eqRegex = new RegExp(`\\b${column}\\s*=\\s*'([^']+)'`, 'i');
+  const eqMatch = sql.match(eqRegex);
+  if (eqMatch) {
+    return [eqMatch[1]];
+  }
+  return [];
+};
+
+const TagDropdown = ({ tableName, columnName, activeServer, selectedDb, onSelectValue, initialChecked, children }: any) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [values, setValues] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [checkedValues, setCheckedValues] = useState<string[]>([]);
+  const { t } = useTranslation();
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isOpen) {
+      setIsOpen(true);
+      setSearchQuery('');
+      setCheckedValues(initialChecked || []);
+      if (values.length === 0) {
+        setIsLoading(true);
+        const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, "");
+        fetch(`${baseUrl}/api/v1/query`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${activeServer.token}`,
+            'x-arc-database': selectedDb
+          },
+          body: JSON.stringify({
+            sql: `SELECT DISTINCT ${columnName} FROM ${tableName} LIMIT 100`
+          })
+        })
+          .then(r => r.json())
+          .then((data: QueryResponse) => {
+            if (data.success && data.data) {
+              const vals = data.data.map(row => row[0]?.toString() || '');
+              setValues(vals.filter(v => v !== ''));
+            }
+          })
+          .catch(console.error)
+          .finally(() => setIsLoading(false));
+      }
+    } else {
+      setIsOpen(false);
+    }
+  };
+
+  const filteredValues = values.filter(v => v.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }} className={isOpen ? "h-full flex flex-col overflow-hidden" : ""}>
+      <div className="tree-leaf" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px' }}>
+        {children}
+        <button 
+          type="button"
+          className="icon-btn-small" 
+          onClick={handleToggle}
+          title={t('views.dataExplorer.filterTag', 'Filter Tag')}
+          style={{ padding: '2px', marginLeft: '4px', opacity: 0.7 }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+        >
+          <Filter size={12} color={isOpen ? 'var(--accent-primary)' : 'var(--text-secondary)'} />
+        </button>
+      </div>
+      {isOpen && (
+        <div 
+          className="tag-dropdown-menu flex flex-col overflow-hidden" 
+          style={{
+            backgroundColor: 'var(--bg-panel)',
+            border: '1px solid var(--border-color)',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+            <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-surface)', borderRadius: '4px', padding: '4px 8px' }}>
+                <Search size={12} color="var(--text-secondary)" style={{ marginRight: '6px' }} />
+                <input 
+                  type="text" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={t('views.dataExplorer.searchPlaceholder', 'Search...')}
+                  style={{ border: 'none', background: 'transparent', outline: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '12px' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ maxHeight: '180px', overflowY: 'auto', padding: '4px 0' }}>
+              {isLoading ? (
+                <div style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                  <Loader2 size={14} className="spin" style={{ margin: '0 auto' }} />
+                </div>
+              ) : filteredValues.length > 0 ? (
+                filteredValues.map((v, i) => (
+                  <label 
+                    key={i} 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      padding: '6px 12px', 
+                      fontSize: '12px', 
+                      cursor: 'pointer',
+                      color: 'var(--text-primary)',
+                      gap: '8px'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <input 
+                      type="checkbox" 
+                      checked={checkedValues.includes(v)}
+                      onChange={(e) => {
+                        let newChecked = [];
+                        if (e.target.checked) {
+                          newChecked = [...checkedValues, v];
+                        } else {
+                          newChecked = checkedValues.filter(item => item !== v);
+                        }
+                        setCheckedValues(newChecked);
+                        onSelectValue(newChecked);
+                      }}
+                    />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
+                  </label>
+                ))
+              ) : (
+                <div style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  {t('views.dataExplorer.noData', 'No values found')}
+                </div>
+              )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const DataExplorer: React.FC = () => {
   const { activeServer } = useServers();
   const { t, i18n } = useTranslation();
@@ -123,6 +278,7 @@ const DataExplorer: React.FC = () => {
   const [selectedDb, setSelectedDb] = useState<string>('');
   const [measurements, setMeasurements] = useState<MeasurementItem[]>([]);
   const [tableColumns, setTableColumns] = useState<Record<string, string[]>>({});
+  const [tableSchemas, setTableSchemas] = useState<Record<string, { tags: string[], fields: string[] }>>({});
 
   const [tabs, setTabs] = useState<QueryTab[]>([{
     id: '1',
@@ -235,7 +391,7 @@ const DataExplorer: React.FC = () => {
     }
   }, [selectedDb, activeServer]);
 
-  const updateSQL = (table: string | null, columns: string[], timeR: string, start: string, end: string) => {
+  const updateSQL = (table: string | null, columns: string[], timeR: string, start?: string, end?: string) => {
     let timeClause = `time >= now() - interval '${timeR}'`;
 
     if (timeR === 'custom') {
@@ -254,26 +410,72 @@ const DataExplorer: React.FC = () => {
       }
     }
 
-    if (!table) {
-      setTabs(prev => prev.map(t => {
-        if (t.id === activeTabId) {
-          let updatedCode = t.queryCode;
-          if (updatedCode.includes('WHERE')) {
-            updatedCode = updatedCode.replace(/WHERE[\s\S]*?(?=LIMIT|$)/i, `WHERE\n  ${timeClause}\n`);
-          } else if (updatedCode.includes('LIMIT')) {
-            updatedCode = updatedCode.replace(/LIMIT/i, `WHERE\n  ${timeClause}\nLIMIT`);
-          } else {
-            updatedCode = `${updatedCode}\nWHERE\n  ${timeClause}`;
-          }
-          return { ...t, queryCode: updatedCode };
-        }
-        return t;
-      }));
-      return;
-    }
+    const isNewTable = table && table !== activeTab.expandedTable;
 
-    const colsStr = columns.length > 0 ? columns.join(',\n  ') : '*';
-    updateActiveTab({ queryCode: `SELECT\n  ${colsStr}\nFROM ${table}\nWHERE\n  ${timeClause}\nLIMIT 100` });
+    setTabs(prev => prev.map(t => {
+      if (t.id === activeTabId) {
+        let updatedCode = t.queryCode;
+        if (!updatedCode && table) {
+           const colsStr = columns.length > 0 ? columns.join(',\n  ') : '*';
+           updatedCode = `SELECT\n  ${colsStr}\nFROM ${table}\nWHERE\n  ${timeClause}\nLIMIT 100`;
+           return { ...t, queryCode: updatedCode };
+        }
+
+        let tagFilters = '';
+        if (!isNewTable) {
+           const whereMatch = updatedCode.match(/WHERE([\s\S]*?)(?=LIMIT|$)/i);
+           if (whereMatch) {
+             tagFilters = whereMatch[1];
+             tagFilters = tagFilters.replace(/\btime\s*[<>=]+\s*(?:now\(\)(?:\s*-\s*interval\s+'[^']+')?|'[^']+')/gi, '___TIME___');
+             tagFilters = tagFilters.replace(/___TIME___\s+AND\s+/gi, '');
+             tagFilters = tagFilters.replace(/\s+AND\s+___TIME___/gi, '');
+             tagFilters = tagFilters.replace(/___TIME___/gi, '');
+             tagFilters = tagFilters.trim();
+           }
+        }
+
+        if (table) {
+           const colsStr = columns.length > 0 ? columns.join(',\n  ') : '*';
+           if (updatedCode.match(/SELECT\s+[\s\S]*?\s+FROM/i)) {
+             updatedCode = updatedCode.replace(/SELECT\s+[\s\S]*?\s+FROM/i, `SELECT\n  ${colsStr}\nFROM`);
+           }
+           if (updatedCode.match(/FROM\s+"?[a-zA-Z0-9_-]+"?(?=\s*(?:WHERE|LIMIT|$))/i)) {
+             updatedCode = updatedCode.replace(/FROM\s+"?[a-zA-Z0-9_-]+"?(?=\s*(?:WHERE|LIMIT|$))/i, `FROM ${table}`);
+           }
+           if (!updatedCode.includes('WHERE')) {
+             if (updatedCode.includes('LIMIT')) {
+               updatedCode = updatedCode.replace(/LIMIT/i, `WHERE\n  ${timeClause}\nLIMIT`);
+             } else {
+               updatedCode += `\nWHERE\n  ${timeClause}`;
+             }
+           }
+        } 
+        
+        const whereIndex = updatedCode.toUpperCase().indexOf('WHERE');
+        if (whereIndex !== -1) {
+          let limitIndex = updatedCode.toUpperCase().indexOf('LIMIT', whereIndex);
+          if (limitIndex === -1) limitIndex = updatedCode.length;
+
+          const head = updatedCode.substring(0, whereIndex + 5);
+          const tail = updatedCode.substring(limitIndex);
+
+          updatedCode = `${head}\n  ${timeClause}`;
+          if (tagFilters) updatedCode += `\n  AND ${tagFilters.replace(/^AND\s+/i, '')}`;
+          if (tail.trim()) updatedCode += `\n${tail.trimStart()}`;
+        } else {
+          const limitIndex = updatedCode.toUpperCase().indexOf('LIMIT');
+          if (limitIndex !== -1) {
+            updatedCode = updatedCode.substring(0, limitIndex) + `WHERE\n  ${timeClause}\n` + updatedCode.substring(limitIndex);
+          } else {
+            updatedCode += `\nWHERE\n  ${timeClause}`;
+          }
+        }
+
+        updatedCode = updatedCode.replace(/\n\s*\n/g, '\n').trim();
+        return { ...t, queryCode: updatedCode };
+      }
+      return t;
+    }));
   };
 
   const toggleTableExpand = (tableName: string) => {
@@ -285,21 +487,22 @@ const DataExplorer: React.FC = () => {
 
       if (!tableColumns[tableName] && activeServer) {
         const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, "");
-        fetch(`${baseUrl}/api/v1/query`, {
-          method: 'POST',
+        fetch(`${baseUrl}/api/v1/databases/${selectedDb}/measurements/${tableName}/schema`, {
+          method: 'GET',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${activeServer.token}`,
-            'x-arc-database': selectedDb
-          },
-          body: JSON.stringify({
-            sql: `SELECT * FROM ${tableName} LIMIT 1`
-          })
+            'Authorization': `Bearer ${activeServer.token}`
+          }
         })
           .then(r => r.json())
-          .then((data: QueryResponse) => {
-            if (data.success && data.columns) {
-              setTableColumns(prev => ({ ...prev, [tableName]: data.columns! }));
+          .then(data => {
+            if (data.success) {
+              const tags = data.tags || [];
+              const fields = data.fields || [];
+              const cols = ['time', ...tags, ...fields];
+              if (cols.length > 0) {
+                setTableColumns(prev => ({ ...prev, [tableName]: cols }));
+                setTableSchemas(prev => ({ ...prev, [tableName]: { tags, fields } }));
+              }
             }
           })
           .catch(console.error);
@@ -316,6 +519,70 @@ const DataExplorer: React.FC = () => {
     }
     updateActiveTab({ selectedColumns: newCols });
     updateSQL(tableName, newCols, activeTab.timeRange, activeTab.customStart, activeTab.customEnd);
+  };
+
+  const handleTagValueSelect = (column: string, values: string[] | string) => {
+    const vals = Array.isArray(values) ? values : [values];
+    const escapeString = (str: string) => typeof str === 'string' ? str.replace(/'/g, "''") : str;
+    
+    let newCondition = '';
+    if (vals.length === 1) {
+      newCondition = `${column} = '${escapeString(vals[0])}'`;
+    } else if (vals.length > 1) {
+      const inVals = vals.map(v => `'${escapeString(v)}'`).join(", ");
+      newCondition = `${column} IN (${inVals})`;
+    }
+    
+    setTabs(prev => prev.map(t => {
+      if (t.id === activeTabId) {
+        let sql = t.queryCode;
+        if (!sql) return t;
+
+        const singleInRegex = new RegExp(`\\b${column}\\s+IN\\s*\\(.*?\\)`, 'i');
+        const singleEqRegex = new RegExp(`\\b${column}\\s*=\\s*'[^']+'`, 'i');
+        
+        let hasOld = false;
+        
+        if (singleInRegex.test(sql)) {
+          hasOld = true;
+          if (newCondition) {
+            sql = sql.replace(singleInRegex, newCondition);
+          } else {
+            sql = sql.replace(singleInRegex, '___TO_REMOVE___');
+          }
+        } else if (singleEqRegex.test(sql)) {
+           hasOld = true;
+           if (newCondition) {
+             sql = sql.replace(singleEqRegex, newCondition);
+           } else {
+             sql = sql.replace(singleEqRegex, '___TO_REMOVE___');
+           }
+        }
+        
+        if (!hasOld && newCondition) {
+          if (sql.includes('WHERE')) {
+            sql = sql.replace(/WHERE/i, `WHERE\n  ${newCondition} AND`);
+          } else if (sql.match(/LIMIT/i)) {
+            sql = sql.replace(/LIMIT/i, `WHERE\n  ${newCondition}\nLIMIT`);
+          } else {
+            sql += `\nWHERE\n  ${newCondition}`;
+          }
+        }
+
+        if (sql.includes('___TO_REMOVE___')) {
+          sql = sql.replace(/AND\s+___TO_REMOVE___\s+AND/gi, 'AND ');
+          sql = sql.replace(/WHERE\s+___TO_REMOVE___\s+AND/gi, 'WHERE\n  ');
+          sql = sql.replace(/AND\s+___TO_REMOVE___(\s+LIMIT|\s*$)/gi, '$1');
+          sql = sql.replace(/WHERE\s+___TO_REMOVE___(\s+LIMIT|\s*$)/gi, '$1'); 
+          sql = sql.replace(/___TO_REMOVE___/g, ''); 
+          sql = sql.replace(/WHERE\s*(LIMIT|\s*$)/i, '$1');
+        }
+
+        sql = sql.replace(/\n\s*\n/g, '\n');
+        return { ...t, queryCode: sql };
+      }
+      return t;
+    }));
   };
 
   const handleTimeRangeChange = (val: string) => {
@@ -441,8 +708,9 @@ const DataExplorer: React.FC = () => {
       const systemPrompt = `You are an NL2SQL assistant for IotEdge DB (DuckDB/InfluxDB SQL compatible). You MUST call tools to get schema/context before generating SQL. Only output SQL, no markdown, no explanation. Only SELECT is allowed.`;
 
       let userPrompt = `Database: ${selectedDb}\n\n`;
+      
       if (customInstructions) {
-        userPrompt += `Context:\n${customInstructions}\n\n`;
+        userPrompt += `User Custom Instructions:\n${customInstructions}\n\n`;
       }
       
       userPrompt += `Important Rule: 单表列引用规则。当查询只有一张表（无 JOIN）时，列名不要加表名前缀。例如写 AVG(usage)，不要写 AVG(cpu.usage)。\n\n`;
@@ -651,17 +919,50 @@ const DataExplorer: React.FC = () => {
               {activeTab.expandedTable === m.name && (
                 <div className="tree-children">
                   {tableColumns[m.name] ? (
-                    tableColumns[m.name].map(col => (
-                      <label key={col} className="tree-leaf" style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={activeTab.selectedColumns.includes(col)}
-                          onChange={(e) => handleColumnSelect(m.name, col, e.target.checked)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        {col}
-                      </label>
-                    ))
+                    tableColumns[m.name].map(col => {
+                      const schema = tableSchemas[m.name] || { tags: [], fields: [] };
+                      const isTime = col === 'time';
+                      const isTag = schema.tags.includes(col);
+                      const isField = schema.fields.includes(col) || (!isTime && !isTag);
+
+                      return isTag ? (
+                        <div key={col} style={{ position: 'relative' }}>
+                          <TagDropdown 
+                            tableName={m.name} 
+                            columnName={col} 
+                            activeServer={activeServer} 
+                            selectedDb={selectedDb} 
+                            initialChecked={getSelectedTagValues(activeTab.queryCode, col)}
+                            onSelectValue={(val: string[]) => handleTagValueSelect(col, val)} 
+                          >
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <input
+                                type="checkbox"
+                                checked={activeTab.selectedColumns.includes(col)}
+                                onChange={(e) => handleColumnSelect(m.name, col, e.target.checked)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <Tag size={12} color="var(--text-secondary)" style={{ flexShrink: 0 }} />
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={col}>{col}</span>
+                            </label>
+                          </TagDropdown>
+                        </div>
+                      ) : (
+                        <div key={col} className="tree-leaf" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <input
+                              type="checkbox"
+                              checked={activeTab.selectedColumns.includes(col)}
+                              onChange={(e) => handleColumnSelect(m.name, col, e.target.checked)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            {isTime && <Clock size={12} color="var(--text-secondary)" style={{ flexShrink: 0 }} />}
+                            {isField && <Hash size={12} color="var(--text-secondary)" style={{ flexShrink: 0 }} />}
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={col}>{col}</span>
+                          </label>
+                        </div>
+                      );
+                    })
                   ) : (
                     <div className="tree-leaf" style={{ opacity: 0.5 }}>{t('views.dataExplorer.loading')}</div>
                   )}

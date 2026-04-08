@@ -455,7 +455,7 @@ const WriteData: React.FC = () => {
         </div>
         <button
           className="icon-btn-small"
-            title={t('views.writeData.refreshDatabasesTooltip')}
+          title={t('views.writeData.refreshDatabasesTooltip')}
           onClick={handleRefreshDatabases}
           disabled={isRefreshingDbs}
           style={{ opacity: isRefreshingDbs ? 0.6 : 1 }}
