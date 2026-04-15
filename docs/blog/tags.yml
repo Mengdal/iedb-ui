@@ -1,0 +1,19 @@
+产品:
+  label: 产品
+  permalink: /产品
+  description: 产品相关内容
+
+工程:
+  label: 工程
+  permalink: /工程
+  description: 工程实践与研发相关内容
+
+教程:
+  label: 教程
+  permalink: /教程
+  description: 使用教程与快速上手
+
+社区:
+  label: 社区
+  permalink: /社区
+  description: 社区动态与生态相关
