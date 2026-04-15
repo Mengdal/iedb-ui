@@ -23,7 +23,7 @@ const config = {
   url: 'https://mengdal.github.io',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/iedb-ui',
+  baseUrl: '/',
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
@@ -136,10 +136,10 @@ const config = {
               {
                 html: `
 <div style="display:flex;flex-direction:column;gap:8px;line-height:1.55">
-  <div>咨询：</strong>+86 180 4904 0679</div>
-  <div>商务：</strong>+86 180 5592 6204</div>
-  <div>产品：</strong>+86 180 5590 8530</div>
-  <div>邮箱：</strong>support@lmgateway.com</div>
+  <div>咨询：+86 180 4904 0679</div>
+  <div>商务：+86 180 5592 6204</div>
+  <div>产品：+86 180 5590 8530</div>
+  <div>邮箱：support@lmgateway.com</div>
 </div>
                 `.trim(),
               },
