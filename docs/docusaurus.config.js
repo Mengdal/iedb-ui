@@ -89,6 +89,12 @@ const config = {
       colorMode: {
         respectPrefersColorScheme: true,
       },
+      algolia: {
+        appId: '87OVAB2L8L',
+        apiKey: '040f36aecd71ce611de0cdcd9329fb14',
+        indexName: 'IotEdgeDB',
+        contextualSearch: true,
+      },
       navbar: {
         title: 'IotEdge DB',
         logo: {
