@@ -57,7 +57,7 @@ const config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/Mengdal/iedb-ui/docs',
+            'https://github.com/Mengdal/iedb-ui/tree/main/docs/',
         },
         blog: {
           showReadingTime: true,
@@ -68,7 +68,7 @@ const config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/Mengdal/iedb-ui/docs',
+            'https://github.com/Mengdal/iedb-ui/tree/main/docs/',
           // Useful options to enforce blogging best practices
           onInlineTags: 'warn',
           onInlineAuthors: 'warn',
