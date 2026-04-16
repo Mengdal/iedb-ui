@@ -114,6 +114,7 @@ const config = {
           src: 'img/logo.png',
         },
         items: [
+          {type: 'search', position: 'left'},
           {
             type: 'docsVersionDropdown',
             position: 'right', // 放在导航栏右侧
