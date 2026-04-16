@@ -99,9 +99,9 @@ const config = {
         respectPrefersColorScheme: true,
       },
       algolia: {
-        appId: '87OVAB2L8L',
-        apiKey: '040f36aecd71ce611de0cdcd9329fb14',
-        indexName: 'IotEdgeDB',
+        appId: '9S9WHWNB0C',
+        apiKey: '601f4a20f0164653cb4be4b4bc96c9b3',
+        indexName: 'docs',
         contextualSearch: true,
       },
       navbar: {
