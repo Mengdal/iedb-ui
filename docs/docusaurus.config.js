@@ -42,6 +42,15 @@ const config = {
     locales: ['zh-Hans']
   },
 
+  headTags: [
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'algolia-site-verification',
+        content: 'D994DAC8B458F9E2',
+      },
+    },
+  ],
 
   presets: [
     [
