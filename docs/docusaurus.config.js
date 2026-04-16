@@ -102,6 +102,10 @@ const config = {
         apiKey: '601f4a20f0164653cb4be4b4bc96c9b3',
         indexName: 'docs',
         contextualSearch: false,
+        searchParameters: {
+          // 按“页面”去重：同一页面的不同段落/锚点不会无限堆叠成上百条
+          distinct: 1,
+        },
       },
       navbar: {
         title: 'IotEdge DB',
