@@ -101,7 +101,7 @@ const config = {
         appId: '9S9WHWNB0C',
         apiKey: '601f4a20f0164653cb4be4b4bc96c9b3',
         indexName: 'docs',
-        contextualSearch: true,
+        contextualSearch: false,
       },
       navbar: {
         title: 'IotEdge DB',
