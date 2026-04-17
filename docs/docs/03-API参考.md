@@ -235,7 +235,7 @@ IEDB原生Line Protocol接口，用请求头而非查询参数。
 
 + `Content-Type: text/plain`
 + `Authorization: Bearer TOKEN`
-+ `x-arc-database: default`- 目标数据库
++ `x-iedb-database: default`- 目标数据库
 
 ### POST /api/v1/write/line-protocol/flush
 强制将缓冲区数据刷新到磁盘。
