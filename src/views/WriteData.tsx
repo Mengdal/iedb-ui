@@ -257,7 +257,7 @@ const WriteData: React.FC = () => {
           headers: {
             'Content-Type': 'text/plain',
             'Authorization': `Bearer ${activeServer.token}`,
-            'x-arc-database': database
+            'x-iedb-database': database
           },
           body: chunks[idx]
         });
