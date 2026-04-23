@@ -82,62 +82,94 @@ IotEdgeDB 输出插件的配置非常简单：
 先创建 `telegraf.conf`：
 
 ```toml
-# 全局 agent 配置
+# Telegraf Agent 全局配置
 [agent]
-interval = "10s"
-round_interval = true
-metric_batch_size = 1000
-metric_buffer_limit = 10000
-collection_jitter = "0s"
-flush_interval = "10s"
-flush_jitter = "0s"
-precision = "0s"
-hostname = ""
-omit_hostname = false
+  interval = "10s"                # 数据采集频率
+  round_interval = true           # 将采集间隔对齐到整时间点
+  flush_interval = "10s"          # 数据发送频率
+  flush_jitter = "0s"             # 避免所有 Agent 同时发送造成拥塞
+  metric_batch_size = 1000        # 每个批次的最大指标数量
+  metric_buffer_limit = 10000     # 单个输出插件缓冲区的最大指标数量
+  collection_jitter = "0s"        # 采集抖动的最大值，用于分散采集
+  precision = ""                  # 时间戳精度
+  debug = false                   # 是否开启调试模式
+  quiet = false                   # 是否仅显示错误日志
+  logfile = ""                    # 日志文件路径，留空则输出到 stderr
+  hostname = ""                   # 指标中使用的 host tag，留空则使用系统主机名
+  omit_hostname = false           # 是否不在指标中设置 host tag
 
-# IotEdgeDB 输出插件
-[[outputs.http]]
-  url = "http://127.0.0.1:8000/api/v1/write/line-protocol"
-  data_format = "influx"
-  [outputs.http.headers]
-    x-iedb-database = "telegraf"
-    x-api-key = "$Token" 
-
-# CPU 指标：按核心和总量采集
-[[inputs.cpu]]
-percpu = true
-totalcpu = true
-collect_cpu_time = false
-report_active = false
-core_tags = false
-
-# 内存指标
-[[inputs.mem]]
-# 无需额外配置
-
-# 磁盘指标：按挂载点采集空间使用情况
-[[inputs.disk]]
-ignore_fs = ["tmpfs", "devtmpfs", "devfs", "iso9660", "overlay", "aufs", "squashfs"]
-
-# 磁盘 IO 指标：读写操作
-[[inputs.diskio]]
-# 无需额外配置
-
-# 网络指标：按网卡采集收发字节和包数
-[[inputs.net]]
-# 无需额外配置
-
-# 系统指标：负载、在线时间、用户数
-[[inputs.system]]
-# 无需额外配置
-
-# 进程指标：按状态统计进程数
+# 采集系统整体进程状态
 [[inputs.processes]]
-# 无需额外配置
 
-# Swap 指标
-[[inputs.swap]]
-# 无需额外配置
+# CPU 采集配置
+[[inputs.cpu]]
+  ## 是否报告每个 CPU 核心的统计信息
+  percpu = true
+  ## 是否报告 CPU 整体统计信息
+  totalcpu = true
+  ## 是否采集原始 CPU 时间指标（如 time_user）
+  collect_cpu_time = false
+  ## 是否计算并上报所有非空闲 CPU 状态的累计时间（time_active）
+  report_active = false
+  ## 是否采集 CPU 核心 ID 和物理 ID 标签（仅部分平台支持）
+  core_tags = false
+
+# =========================================
+# Memory (内存) 采集配置
+# =========================================
+[[inputs.mem]]
+  # 采集系统内存指标（可用内存、已用内存、缓存、Buffers等）
+  # 此插件无需特殊参数，保持空配即可默认采集所有核心指标
+
+# =========================================
+# Disk (磁盘使用率) 采集配置
+# =========================================
+[[inputs.disk]]
+  ## 如果你只想采集指定的挂载点，取消下行的注释并修改
+  # mount_points = ["/", "/data"]
+  
+  ## 忽略一些临时的虚拟文件系统，只采集物理磁盘
+  ignore_fs = ["tmpfs", "devtmpfs", "devfs", "iso9660", "overlay", "aufs", "squashfs"]
+
+# =========================================
+# Disk IO (磁盘读写速率) 采集配置
+# =========================================
+[[inputs.diskio]]
+  ## 默认采集所有物理磁盘的 IO（读写字节数、读写次数、耗时等）
+  ## 如果只想采集特定的磁盘，可以这样配：
+  # devices = ["sda", "sdb", "nvme0n1"]
+
+# =========================================
+# Network (网络流量) 采集配置
+# =========================================
+[[inputs.net]]
+  ## 采集网卡的收发字节数（bytes_recv / bytes_sent）、错包、丢包等
+  ## 默认采集所有网卡。如果只想采集主要的网卡，可以指定：
+  # interfaces = ["eth0", "en0", "wlan0"]
+
+# =========================================
+# System (系统整体负载)
+# =========================================
+[[inputs.system]]
+  # 采集系统的基础指标，如：load1, load5, load15（系统负载）和 uptime（运行时间）
+  # 监控面板的头部通常都需要这些宏观指标
+  fielddrop = ["uptime_format"]
+
+# 输出到 GreptimeDB 的 HTTP API 配置
+[[outputs.http]]
+  url = "http://localhost:8000/api/v1/write/line-protocol"
+  data_format = "influx"
+    [outputs.http.headers]
+    x-iedb-database = "default"
+    x-api-key = "$token"
+
+# =========================================
+# 聚合器：合并同类项 (非常适合列式时序数据库)
+# =========================================
+[[aggregators.merge]]
+  ## 告诉 Telegraf：如果发现表名(Measurement)、标签(Tags)和时间戳(Timestamp)完全一致的数据
+  ## 请不要分开传，直接把它们的 Fields 合并成一个超级大字典，然后再发给输出端。
+  drop_original = true
 ```
 
 这份配置会：
