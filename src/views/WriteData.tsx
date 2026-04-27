@@ -401,7 +401,7 @@ const WriteData: React.FC = () => {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${activeServer.token}`,
-            'x-arc-database': database
+            'x-iedb-database': database
           },
           body: formData
         });

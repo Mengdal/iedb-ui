@@ -49,7 +49,7 @@ response = requests.post(
     headers={
         "Authorization": "Bearer YOUR_TOKEN",
         "Content-Type": "application/msgpack",
-        "x-arc-database": "default"
+        "x-iedb-database": "default"
     },
     data=msgpack.packb(data)
 )
@@ -154,7 +154,7 @@ curl -H "Accept: application/json" http://localhost:8000/metrics
 + `Authorization: Bearer TOKEN`
 + `Content-Type: application/msgpack`
 + `Content-Encoding: gzip`（可选）
-+ `x-arc-database: default`（可选）
++ `x-iedb-database: default`（可选）
 
 **Body (MessagePack):**
 
@@ -558,7 +558,7 @@ _配置禁用删除（403）：_
 
 ```json
 {
-  "error": "Delete operations are disabled. Set delete.enabled=true in arc.toml to enable."
+  "error": "Delete operations are disabled. Set delete.enabled=true in iedb.toml to enable."
 }
 ```
 

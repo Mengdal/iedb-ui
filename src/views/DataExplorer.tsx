@@ -155,7 +155,7 @@ const TagDropdown = ({ tableName, columnName, activeServer, selectedDb, onSelect
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${activeServer.token}`,
-            'x-arc-database': selectedDb
+            'x-iedb-database': selectedDb
           },
           body: JSON.stringify({
             sql: `SELECT DISTINCT ${columnName} FROM ${tableName} LIMIT 100`
@@ -617,7 +617,7 @@ const DataExplorer: React.FC = () => {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${activeServer.token}`,
-        'x-arc-database': selectedDb
+        'x-iedb-database': selectedDb
       },
       body: JSON.stringify({
         sql: activeTab.queryCode
@@ -681,7 +681,7 @@ const DataExplorer: React.FC = () => {
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${activeServer.token}`,
-                'x-arc-database': selectedDb
+                'x-iedb-database': selectedDb
               },
               body: JSON.stringify({
                 sql: `SELECT * FROM ${m.name} LIMIT 1`

@@ -113,7 +113,7 @@ curl -X POST http://localhost:8000/api/v1/query \
   "topics": ["sensors/#", "factory/+/metrics"],
   "database": "iot",
   "qos": 1,
-  "client_id": "arc-factory",
+  "client_id": "iedb-factory",
   "username": "mqtt_user",
   "password": "mqtt_pass",
   "tls_enabled": false,
@@ -324,7 +324,7 @@ curl -X POST http://localhost:8000/api/v1/mqtt/subscriptions \
     "topics": ["secure/#"],
     "database": "production",
     "tls_enabled": true,
-    "tls_ca_path": "/etc/arc/certs/ca.crt"
+    "tls_ca_path": "/etc/iedb/certs/ca.crt"
   }'
 ```
 
@@ -339,9 +339,9 @@ curl -X POST http://localhost:8000/api/v1/mqtt/subscriptions \
     "topics": ["secure/#"],
     "database": "production",
     "tls_enabled": true,
-    "tls_cert_path": "/etc/arc/certs/client.crt",
-    "tls_key_path": "/etc/arc/certs/client.key",
-    "tls_ca_path": "/etc/arc/certs/ca.crt"
+    "tls_cert_path": "/etc/iedb/certs/client.crt",
+    "tls_key_path": "/etc/iedb/certs/client.key",
+    "tls_ca_path": "/etc/iedb/certs/ca.crt"
   }'
 ```
 
