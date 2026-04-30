@@ -522,7 +522,8 @@
 
       "csvFileLabel": "CSV File",
       "parquetFileLabel": "Parquet File",
-
+      "measurementLabel": "Measurement",
+      "selectMeasurement": "Select a measurement",
       "selectFile": "Select File",
       "noFileSelected": "No file selected",
 
@@ -532,7 +533,7 @@
       "importing": "Importing...",
 
       "supportCommentsHint": "Support comments with # and multi-line batch writes.",
-      "uploadAndImportHint": "Upload {{mode}} and import to selected database.",
+      "uploadAndImportHint": "Upload {{mode}} and import to the selected measurement {{measurement}} in the chosen database.",
 
       "sampleDatasetsTitle": "Sample datasets",
       "sampleDatasetsDesc": "Quickly import sample data into the selected database.",
@@ -545,6 +546,7 @@
 
       "pleaseSelectDatabaseFirst": "Please select a database first.",
       "pleaseChooseFileFirst": "Please choose a file first.",
+      "pleaseSelectMeasurementFirst": "Please select a measurement first.",
       "pleaseSelectSampleDataset": "Please select a sample dataset.",
 
       "importingSampleMessage": "Importing sample: {{name}}...",
@@ -554,7 +556,7 @@
       "wroteLinesSuccessMessage": "Successfully wrote {{totalLines}} lines to {{database}}.",
 
       "importingFileMessage": "Importing {{fileName}}...",
-      "importSucceededMessage": "{{mode}} import succeeded for {{database}}.",
+      "importSucceededMessage": "{{mode}} import succeeded for {{database}} / {{measurement}}.",
       "importFailedMessage": "{{mode}} import failed.",
 
       "browserBlockedDownloadMessage": "Browser blocked the download (CORS). Please use the server-side sample import or upload the file manually.",

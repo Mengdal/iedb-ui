@@ -55,7 +55,7 @@ home,room=Kitchen temp=23.3,hum=36.9,co=18i 1774548000`
 home_actions,room=Kitchen,action=alert,level=warn description="Carbon monoxide level above normal: 18 ppm." 1774548000
 home_actions,room=Living\ Room,action=alert,level=warn description="Carbon monoxide level above normal: 17 ppm." 1774555200`
   },
-  {
+  { 
     id: 'weather',
     name: 'NOAA Bay Area weather data',
     description: 'Daily weather metrics for Bay Area airports (large dataset).',

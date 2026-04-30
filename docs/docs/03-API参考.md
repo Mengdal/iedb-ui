@@ -343,7 +343,7 @@ IEDB原生Line Protocol接口，用请求头而非查询参数。
 {
   "id": "abc123",
   "name": "my-service",
-  "token": "arc_xxxxxxxxxxxxxxxxxxxxxxxx",
+  "token": "xxxxxxxxxxxxxxxxxxxxxxxx",
   "is_admin": false,
   "created_at": "2024-12-02T10:30:00Z"
 }

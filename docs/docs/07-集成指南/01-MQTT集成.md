@@ -458,10 +458,10 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 | **指标** | **类型** | **描述** |
 | --- | --- | --- |
-| `arc_mqtt_messages_received_total` | Counter | 收到的消息总数 |
-| `arc_mqtt_bytes_received_total` | Counter | 接收到的总字节数 |
-| `arc_mqtt_decode_errors_total` | Counter | 消息解码错误 |
-| `arc_mqtt_connection_status` | Gauage | 连接状态（1=已连接） |
+| `iedb_mqtt_messages_received_total` | Counter | 收到的消息总数 |
+| `iedb_mqtt_bytes_received_total` | Counter | 接收到的总字节数 |
+| `iedb_mqtt_decode_errors_total` | Counter | 消息解码错误 |
+| `iedb_mqtt_connection_status` | Gauage | 连接状态（1=已连接） |
 
 
 ## 查询 MQTT 数据
@@ -537,7 +537,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 3. **合理使用 QoS** ——QoS 0 用于最高吞吐量，QoS 1 用于可靠交付（推荐），QoS 2 用于精确一次（开销最高）。
 4. **设置合理的重连间隔**——默认的最小值 1 秒/最大值 60 秒效果不错。避免将最小值设置得太低，以免代理服务器过载。
 5. **有效使用主题通配符**— 订阅特定模式（`sensors/+/temperature`）而不是过于宽泛的模式（`#`）。
-6. **监控订阅健康状况**—设置提醒`arc_mqtt_connection_status == 0`。`rate(arc_mqtt_decode_errors_total[5m]) > 0`
+6. **监控订阅健康状况**—设置提醒`iedb_mqtt_connection_status == 0`。`rate(iedb_mqtt_decode_errors_total[5m]) > 0`
 
 ## 后续步骤
 + [分层存储](../08-数据生命周期/04-分层存储.md)——利用热/冷分层管理MQTT数据生命周期
