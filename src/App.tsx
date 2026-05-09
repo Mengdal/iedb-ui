@@ -16,6 +16,7 @@ import Tokens from './views/Tokens';
 import Rbac from './views/Rbac';
 import Plugins from './views/Plugins';
 import PluginsMqtt from './views/PluginsMqtt';
+import Dashboards from './views/Dashboards';
 import './App.css';
 
 export type CurrentView =
@@ -99,7 +100,7 @@ function App() {
 
     switch (currentView) {
       case 'overview': return <SystemOverview />;
-      case 'data-explorer': return <DataExplorer />;
+      case 'data-explorer': return <DataExplorer onNavigate={setCurrentView} />;
       case 'servers': return <Servers />;
       case 'integrations': return <Integrations />;
       case 'databases': return <Databases />;
@@ -109,6 +110,7 @@ function App() {
       case 'rbac': return <Rbac />;
       case 'plugins': return <Plugins />;
       case 'plugins-mqtt': return <PluginsMqtt />;
+      case 'dashboards': return <Dashboards onNavigate={setCurrentView} />;
       default:
         return (
           <div className="placeholder-view">
@@ -134,6 +136,14 @@ function App() {
     } catch {
       // ignore storage failure
     }
+    // Continuously trigger window resize during sidebar transition to force ECharts/Grid layout updates
+    const triggerResize = () => window.dispatchEvent(new Event('resize'));
+    const interval = setInterval(triggerResize, 30);
+    setTimeout(() => {
+      clearInterval(interval);
+      triggerResize();
+    }, 350); // Covering the typical 300ms CSS transition
+    return () => clearInterval(interval);
   }, [sidebarOpen]);
 
   const getPageTitle = () => {

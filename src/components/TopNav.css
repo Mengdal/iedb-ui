@@ -10,7 +10,8 @@
   z-index: 100;
 }
 
-.nav-left, .nav-right {
+.nav-left,
+.nav-right {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -23,8 +24,17 @@
 }
 
 .brand-logo {
-  width: 24px;
-  height: 24px;
+  height: 48px;
+  max-width: 250px;
+  object-fit: contain;
+  transform: scale(2.8);
+  transform-origin: left center;
+  margin-right: 48px;
+  margin-top: 5px;
+  margin-left: -16px;
+  /* 负数向左移动，靠近侧边栏菜单按钮 */
+  pointer-events: none;
+  /* 防止放大后的透明区域遮挡并影响其他元素的点击 */
 }
 
 .brand-name {

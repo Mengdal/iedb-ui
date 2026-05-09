@@ -2,8 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import './HelpDoc.css';
 
-const YUQUE_HELP_DOC_URL =
-  'https://lmgateway.yuque.com/org-wiki-lmgateway-tau91b/quu9zb/eoka2h331xgfw7k0';
+const DOCS_URL = 'http://docs.lmgateway.com/';
 
 export default function HelpDoc() {
   const openedRef = useRef(false);
@@ -12,7 +11,7 @@ export default function HelpDoc() {
   useEffect(() => {
     if (openedRef.current) return;
     openedRef.current = true;
-    window.open(YUQUE_HELP_DOC_URL, '_blank', 'noopener,noreferrer');
+    window.open(DOCS_URL, '_blank', 'noopener,noreferrer');
   }, []);
 
   return (
@@ -20,7 +19,7 @@ export default function HelpDoc() {
       <div className="help-doc-fallback">
         <p>{t('views.helpDoc.opening')}</p>
         <a
-          href={YUQUE_HELP_DOC_URL}
+          href={DOCS_URL}
           target="_blank"
           rel="noreferrer"
           className="help-doc-link"

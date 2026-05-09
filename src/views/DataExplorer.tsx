@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, History, Plus, Database, Table2, LineChart, BarChart2, Search, Download, Loader2, Activity, ChevronLeft, ChevronRight, RefreshCw, Sparkles, X, Clock, Tag, Hash, Filter } from 'lucide-react';
+import { Play, History, Plus, Database, Table2, LineChart, BarChart2, Search, Download, Loader2, Activity, ChevronLeft, ChevronRight, RefreshCw, Sparkles, X, Clock, Tag, Hash, Filter, LayoutDashboard, ArrowRight, Star } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
+import CodeMirror from '@uiw/react-codemirror';
+import { sql } from '@codemirror/lang-sql';
+import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import { useTranslation } from 'react-i18next';
 import { useServers } from '../contexts/ServerContext';
+import type { CurrentView } from '../App';
+import { buildChartOption, downloadFile } from '../utils/chartUtils';
 import './DataExplorer.css';
 
 interface DatabaseItem {
@@ -14,7 +19,7 @@ interface MeasurementItem {
   name: string;
 }
 
-interface QueryResponse {
+export interface QueryResponse {
   success: boolean;
   columns?: string[];
   data?: any[][];
@@ -45,76 +50,9 @@ interface QueryHistoryItem {
   timestamp: number;
 }
 
-const defaultQuery = "SELECT\n  *\nFROM cpu\nWHERE\n  time >= now() - interval '1 hour'\nLIMIT 100";
+const defaultQuery = "SELECT\n  *\nFROM cpu\nWHERE\n  time >= now() - interval '1 hour'\nLIMIT 1000";
 
-const buildChartOption = (type: 'line' | 'bar', result: QueryResponse) => {
-  if (!result.columns || !result.data || result.data.length === 0) return {};
 
-  const timeIndex = result.columns.findIndex(c => c.toLowerCase() === 'time');
-  const xColIndex = timeIndex !== -1 ? timeIndex : 0;
-
-  const numericSeries: { name: string; index: number }[] = [];
-  result.columns.forEach((col, idx) => {
-    if (idx !== xColIndex) {
-      const firstNonNull = result.data!.find(row => row[idx] !== null && row[idx] !== undefined);
-      if (firstNonNull && typeof firstNonNull[idx] === 'number') {
-        numericSeries.push({ name: col, index: idx });
-      }
-    }
-  });
-
-  const xAxisData = result.data.map(row => {
-    const val = row[xColIndex];
-    if (typeof val === 'string' && val.includes('T')) {
-      const d = new Date(val);
-      if (!isNaN(d.getTime())) {
-        return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
-      }
-    }
-    return val;
-  });
-
-  const series = numericSeries.map(s => ({
-    name: s.name,
-    type: type,
-    smooth: true,
-    showSymbol: false,
-    emphasis: { focus: 'series' },
-    data: result.data!.map(row => row[s.index] || 0),
-    lineStyle: type === 'line' ? { width: 2 } : undefined
-  }));
-
-  return {
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: 'rgba(24, 24, 27, 0.9)',
-      borderColor: '#3f3f46',
-      textStyle: { color: '#fff', fontSize: 12 },
-      axisPointer: { type: 'cross', label: { backgroundColor: '#6b7280' } }
-    },
-    legend: {
-      type: 'scroll',
-      top: 10,
-      textStyle: { color: '#9ca3af', fontSize: 12 },
-      pageIconColor: '#3b82f6',
-      pageTextStyle: { color: '#9ca3af' }
-    },
-    grid: { left: '3%', right: '4%', bottom: '3%', top: 50, containLabel: true },
-    xAxis: {
-      type: 'category',
-      boundaryGap: type === 'bar',
-      data: xAxisData,
-      axisLine: { lineStyle: { color: '#4b5563' } },
-      axisLabel: { color: '#9ca3af' }
-    },
-    yAxis: {
-      type: 'value',
-      splitLine: { lineStyle: { color: '#374151', type: 'dashed' } },
-      axisLabel: { color: '#9ca3af' }
-    },
-    series
-  };
-};
 
 export const getSelectedTagValues = (sql: string, column: string): string[] => {
   if (!sql) return [];
@@ -158,7 +96,7 @@ const TagDropdown = ({ tableName, columnName, activeServer, selectedDb, onSelect
             'x-iedb-database': selectedDb
           },
           body: JSON.stringify({
-            sql: `SELECT DISTINCT ${columnName} FROM ${tableName} LIMIT 100`
+            sql: `SELECT DISTINCT ${columnName} FROM ${tableName} LIMIT 1000`
           })
         })
           .then(r => r.json())
@@ -271,7 +209,11 @@ const TagDropdown = ({ tableName, columnName, activeServer, selectedDb, onSelect
   );
 };
 
-const DataExplorer: React.FC = () => {
+interface DataExplorerProps {
+  onNavigate?: (view: CurrentView) => void;
+}
+
+const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
   const { activeServer } = useServers();
   const { t, i18n } = useTranslation();
   const [databases, setDatabases] = useState<DatabaseItem[]>([]);
@@ -305,7 +247,29 @@ const DataExplorer: React.FC = () => {
       return [];
     }
   });
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [favoriteQueries, setFavoriteQueries] = useState<QueryHistoryItem[]>(() => {
+    try {
+      const stored = localStorage.getItem('favoriteQueries');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showDrawer, setShowDrawer] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<'history' | 'favorites'>('history');
+
+  const toggleFavorite = (item: QueryHistoryItem) => {
+    setFavoriteQueries(prev => {
+      const exists = prev.some(f => f.id === item.id);
+      const updated = exists
+        ? prev.filter(f => f.id !== item.id)
+        : [item, ...prev].slice(0, 50);
+      localStorage.setItem('favoriteQueries', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const isFavorite = (id: string) => favoriteQueries.some(f => f.id === id);
 
   const [isQuerying, setIsQuerying] = useState(false);
   const [isRefreshingDbs, setIsRefreshingDbs] = useState(false);
@@ -317,11 +281,53 @@ const DataExplorer: React.FC = () => {
   const [nlQuery, setNlQuery] = useState('');
   const [isGeneratingSql, setIsGeneratingSql] = useState(false);
 
+  const [showSaveDashboardModal, setShowSaveDashboardModal] = useState(false);
+  const [saveCellName, setSaveCellName] = useState('');
+  const [saveDashboardId, setSaveDashboardId] = useState('');
+  const [saveNewName, setSaveNewName] = useState('');
+  const [saveNewDesc, setSaveNewDesc] = useState('');
+  const [saveCellType, setSaveCellType] = useState<'table' | 'line' | 'bar'>('line');
+  const [showSavedToast, setShowSavedToast] = useState(false);
+  const [editingCellId, setEditingCellId] = useState<string | null>(null);
+  const [editingDashboardId, setEditingDashboardId] = useState<string | null>(null);
+
   const schemaCacheRef = useRef<Record<string, any>>({});
 
   const updateActiveTab = (updates: Partial<QueryTab>) => {
     setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, ...updates } : t));
   };
+
+  useEffect(() => {
+    try {
+      const pending = localStorage.getItem('iotedge-pending-query');
+      if (pending) {
+        const { text, database, cellId, dashboardId } = JSON.parse(pending);
+        const newId = Date.now().toString();
+        setTabs(prev => [
+          ...prev,
+          {
+            id: newId,
+            count: prev.length + 1,
+            queryCode: text || defaultQuery,
+            queryResult: null,
+            expandedTable: null,
+            selectedColumns: [],
+            timeRange: '1 hour',
+            customStart: '',
+            customEnd: '',
+            visualization: 'table',
+            currentPage: 1,
+            pageSize: 32
+          }
+        ]);
+        setActiveTabId(newId);
+        if (database) setSelectedDb(database);
+        if (cellId) setEditingCellId(cellId);
+        if (dashboardId) setEditingDashboardId(dashboardId);
+        localStorage.removeItem('iotedge-pending-query');
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   // Fetch Databases
   useEffect(() => {
@@ -372,6 +378,15 @@ const DataExplorer: React.FC = () => {
       .finally(() => setIsRefreshingDbs(false));
   };
 
+  // Convert our state to the format required by CodeMirror
+  const cmSchema = React.useMemo(() => {
+    const s: Record<string, string[]> = {};
+    measurements.forEach(m => {
+      s[m.name] = tableColumns[m.name] || [];
+    });
+    return s;
+  }, [measurements, tableColumns]);
+
   // Fetch Measurements
   useEffect(() => {
     if (selectedDb && activeServer) {
@@ -385,6 +400,27 @@ const DataExplorer: React.FC = () => {
         .then(data => {
           if (data && data.measurements) {
             setMeasurements(data.measurements);
+            // Optionally, prefetch schemas to power autocomplete instantly
+            data.measurements.forEach((m: MeasurementItem) => {
+              if (!tableColumns[m.name]) {
+                fetch(`${baseUrl}/api/v1/databases/${selectedDb}/measurements/${m.name}/schema`, {
+                  headers: { 'Authorization': `Bearer ${activeServer.token}` }
+                })
+                  .then(r => r.json())
+                  .then(schemaData => {
+                    if (schemaData.success) {
+                      const tags = schemaData.tags || [];
+                      const fields = schemaData.fields || [];
+                      const cols = ['time', ...tags, ...fields];
+                      if (cols.length > 0) {
+                        setTableColumns(prev => ({ ...prev, [m.name]: cols }));
+                        setTableSchemas(prev => ({ ...prev, [m.name]: { tags, fields } }));
+                      }
+                    }
+                  })
+                  .catch(() => {}); // silent catch for background prefetch
+              }
+            });
           }
         })
         .catch(console.error);
@@ -415,9 +451,17 @@ const DataExplorer: React.FC = () => {
     setTabs(prev => prev.map(t => {
       if (t.id === activeTabId) {
         let updatedCode = t.queryCode;
+
+        // Option 2: Completely overwrite SQL when switching to a new table to avoid regex corruption
+        if (isNewTable && table) {
+           const colsStr = columns.length > 0 ? columns.join(',\n  ') : '*';
+           updatedCode = `SELECT\n  ${colsStr}\nFROM ${table}\nWHERE\n  ${timeClause}\nLIMIT 1000`;
+           return { ...t, queryCode: updatedCode };
+        }
+
         if (!updatedCode && table) {
            const colsStr = columns.length > 0 ? columns.join(',\n  ') : '*';
-           updatedCode = `SELECT\n  ${colsStr}\nFROM ${table}\nWHERE\n  ${timeClause}\nLIMIT 100`;
+           updatedCode = `SELECT\n  ${colsStr}\nFROM ${table}\nWHERE\n  ${timeClause}\nLIMIT 1000`;
            return { ...t, queryCode: updatedCode };
         }
 
@@ -585,6 +629,38 @@ const DataExplorer: React.FC = () => {
     }));
   };
 
+  const applyTimeRangeToQuery = (sql: string, timeRange: string, customStart?: string, customEnd?: string) => {
+    if (!sql || !sql.trim()) return sql;
+    let timeCondition = '';
+    if (timeRange === 'custom') {
+      if (!customStart || !customEnd) return sql;
+      timeCondition = `time >= '${new Date(customStart).toISOString()}' AND time <= '${new Date(customEnd).toISOString()}'`;
+    } else {
+      timeCondition = `time >= now() - interval '${timeRange}'`;
+    }
+
+    const intervalRegex = /time\s*>=\s*now\(\)\s*-\s*interval\s+'[^']+'/ig;
+    if (intervalRegex.test(sql)) {
+      return sql.replace(intervalRegex, timeCondition);
+    }
+    const customRegex = /time\s*>=\s*'[^']+'\s*AND\s*time\s*<=\s*'[^']+'/ig;
+    if (customRegex.test(sql)) {
+      return sql.replace(customRegex, timeCondition);
+    }
+
+    if (/WHERE/i.test(sql)) {
+      return sql.replace(/WHERE/i, `WHERE ${timeCondition} AND `);
+    } else if (/GROUP BY/i.test(sql)) {
+      return sql.replace(/GROUP BY/i, `WHERE ${timeCondition} GROUP BY`);
+    } else if (/ORDER BY/i.test(sql)) {
+      return sql.replace(/ORDER BY/i, `WHERE ${timeCondition} ORDER BY`);
+    } else if (/LIMIT/i.test(sql)) {
+      return sql.replace(/LIMIT/i, `WHERE ${timeCondition} LIMIT`);
+    } else {
+      return `${sql} WHERE ${timeCondition}`;
+    }
+  };
+
   const handleTimeRangeChange = (val: string) => {
     if (val === 'custom') {
       setPrevTimeRange(activeTab.timeRange);
@@ -592,13 +668,19 @@ const DataExplorer: React.FC = () => {
       setShowTimeModal(true);
     } else {
       updateActiveTab({ timeRange: val });
-      updateSQL(activeTab.expandedTable, activeTab.selectedColumns, val, activeTab.customStart, activeTab.customEnd);
+      setTabs(prev => prev.map(t => {
+        if (t.id === activeTabId) {
+          const newSql = applyTimeRangeToQuery(t.queryCode, val);
+          return { ...t, queryCode: newSql };
+        }
+        return t;
+      }));
     }
   };
 
   const handleRunQuery = () => {
     const sql = activeTab.queryCode.trim();
-    if (!sql || !activeServer || !selectedDb) return;
+    if (!sql || !activeServer) return;
     setIsQuerying(true);
 
     setQueryHistory(prev => {
@@ -612,13 +694,16 @@ const DataExplorer: React.FC = () => {
     });
 
     const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, "");
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${activeServer.token}`,
+    };
+    if (selectedDb) {
+      headers['x-iedb-database'] = selectedDb;
+    }
     fetch(`${baseUrl}/api/v1/query`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${activeServer.token}`,
-        'x-iedb-database': selectedDb
-      },
+      headers,
       body: JSON.stringify({
         sql: activeTab.queryCode
       })
@@ -816,18 +901,6 @@ const DataExplorer: React.FC = () => {
     setActiveTabId(nextActiveId);
   };
 
-  const downloadFile = (content: string, filename: string, type: string) => {
-    const blob = new Blob([content], { type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   const handleExport = (format: string) => {
     const { queryResult } = activeTab;
     if (!queryResult || !queryResult.data || !queryResult.columns) return;
@@ -850,6 +923,103 @@ const DataExplorer: React.FC = () => {
       });
       downloadFile(JSON.stringify(jsonData, null, 2), 'export.json', 'application/json');
     }
+  };
+
+  const handleOpenSaveDashboard = () => {
+    setSaveCellName(activeTab.expandedTable || 'Query Cell');
+    setSaveDashboardId(editingDashboardId || '');
+    setSaveNewName('');
+    setSaveNewDesc('');
+    setSaveCellType(activeTab.visualization as 'table' | 'line' | 'bar');
+    setShowSaveDashboardModal(true);
+  };
+
+  const handleSaveToDashboard = () => {
+    if (!saveCellName.trim()) return;
+    const cellName = saveCellName.trim();
+    const DASH_KEY = 'iotedge-dashboards';
+    let dashboards: any[];
+    try {
+      dashboards = JSON.parse(localStorage.getItem(DASH_KEY) || '[]');
+    } catch {
+      dashboards = [];
+    }
+
+    const newCell = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: cellName,
+      type: saveCellType,
+      queries: [{
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        text: activeTab.queryCode,
+        database: selectedDb
+      }],
+      w: 4,
+      h: 3,
+      x: 0,
+      y: 9999
+    };
+
+    let targetId = saveDashboardId;
+    if (!targetId) {
+      targetId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    if (editingCellId && editingDashboardId) {
+      dashboards = dashboards.map(d => {
+        if (d.id !== editingDashboardId) return d;
+        return {
+          ...d,
+          updatedAt: Date.now(),
+          cells: d.cells.map((c: any) => {
+            if (c.id !== editingCellId) return c;
+            return {
+              ...c,
+              name: cellName,
+              type: saveCellType,
+              queries: [{
+                id: c.queries?.[0]?.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                text: activeTab.queryCode,
+                database: selectedDb
+              }]
+            };
+          })
+        };
+      });
+      setEditingCellId(null);
+      setEditingDashboardId(null);
+    } else if (!saveDashboardId) {
+      dashboards.push({
+        id: targetId,
+        name: saveNewName.trim() || 'New Dashboard',
+        description: saveNewDesc.trim(),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        cells: [newCell],
+        timeRange: '1 hour',
+        autoRefresh: 0
+      });
+    } else {
+      dashboards = dashboards.map(d => {
+        if (d.id === targetId) {
+          return { ...d, updatedAt: Date.now(), cells: [...(d.cells || []), newCell] };
+        }
+        return d;
+      });
+    }
+
+    try {
+      localStorage.setItem(DASH_KEY, JSON.stringify(dashboards));
+    } catch { /* ignore */ }
+
+    setShowSaveDashboardModal(false);
+    setShowSavedToast(true);
+    setTimeout(() => setShowSavedToast(false), 5000);
+  };
+
+  const handleGoToDashboards = () => {
+    setShowSavedToast(false);
+    if (onNavigate) onNavigate('dashboards');
   };
 
   if (!activeServer) {
@@ -895,6 +1065,7 @@ const DataExplorer: React.FC = () => {
             value={selectedDb}
             onChange={(e) => setSelectedDb(e.target.value)}
           >
+            <option value="">{t('views.dataExplorer.noDatabaseSelected')}</option>
             {databases.map(db => (
               <option key={db.name} value={db.name}>{db.name}</option>
             ))}
@@ -1011,7 +1182,7 @@ const DataExplorer: React.FC = () => {
           <button
             className="icon-btn history-btn"
             title={t('views.dataExplorer.queryHistoryTitle')}
-            onClick={() => setShowHistoryModal(true)}
+            onClick={() => { setShowDrawer(true); setDrawerTab('history'); }}
             style={{ marginRight: '6px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}
           >
             <History size={14} />
@@ -1067,7 +1238,7 @@ const DataExplorer: React.FC = () => {
             <button
               className="btn btn-primary run-query"
               onClick={handleRunQuery}
-              disabled={isQuerying || isLoadingDbs || isRefreshingDbs || !selectedDb}
+              disabled={isQuerying || isLoadingDbs || isRefreshingDbs}
             >
               {isQuerying ? <Loader2 size={16} className="spin" /> : <Play size={16} fill="white" />}
               {t('views.dataExplorer.runQuery')}
@@ -1088,11 +1259,13 @@ const DataExplorer: React.FC = () => {
         )}
 
         <div className="query-editor-area">
-          <textarea
-            className="code-editor"
+          <CodeMirror
             value={activeTab.queryCode}
-            onChange={(e) => updateActiveTab({ queryCode: e.target.value })}
-            spellCheck={false}
+            height="100%"
+            theme={vscodeDark}
+            extensions={[sql({ schema: cmSchema })]}
+            onChange={(value) => updateActiveTab({ queryCode: value })}
+            className="code-editor-cm"
           />
         </div>
 
@@ -1119,15 +1292,24 @@ const DataExplorer: React.FC = () => {
               </button>
             </div>
           </div>
-          {hasData && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {hasData && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '13px' }}>
                 <Activity size={14} />
                 <span>
                   {t('views.dataExplorer.rowsInTime', { rows: (activeTab.queryResult?.row_count || 0).toLocaleString(i18n.language), ms: activeTab.queryResult?.execution_time_ms || 0 })}
                 </span>
               </div>
-
+            )}
+            <button
+              className="btn btn-outlined"
+              onClick={handleOpenSaveDashboard}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}
+            >
+              <LayoutDashboard size={14} />
+              {t('views.dataExplorer.saveToDashboard')}
+            </button>
+            {hasData && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Download size={14} className="text-secondary" style={{ color: 'var(--text-secondary)' }} />
                 <select className="time-range" value="" onChange={(e) => handleExport(e.target.value)}>
@@ -1136,8 +1318,8 @@ const DataExplorer: React.FC = () => {
                   <option value="json">{t('views.dataExplorer.exportJson')}</option>
                 </select>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="results-pane">
@@ -1238,10 +1420,123 @@ const DataExplorer: React.FC = () => {
                   >
                     <ChevronRight size={16} />
                   </button>
-                </div>
-              </div>
-            )}
           </div>
+        </div>
+      )}
+
+      {showSaveDashboardModal && (() => {
+        const DASH_KEY = 'iotedge-dashboards';
+        let existingDashboards: any[];
+        try {
+          existingDashboards = JSON.parse(localStorage.getItem(DASH_KEY) || '[]');
+        } catch {
+          existingDashboards = [];
+        }
+        return (
+          <div className="modal-overlay" onClick={() => setShowSaveDashboardModal(false)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>{t('views.dataExplorer.saveToDashboard')}</h3>
+                <button className="icon-btn" onClick={() => setShowSaveDashboardModal(false)}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label>{t('views.dashboards.cellNameLabel')}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder={t('views.dashboards.cellNamePlaceholder')}
+                    value={saveCellName}
+                    onChange={e => setSaveCellName(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group">
+                  <label>{t('views.dashboards.visualizationType')}</label>
+                  <div className="viz-type-switcher">
+                    <button className={`viz-btn ${saveCellType === 'table' ? 'active' : ''}`}
+                      onClick={() => setSaveCellType('table')}>
+                      <Table2 size={16} />
+                    </button>
+                    <button className={`viz-btn ${saveCellType === 'line' ? 'active' : ''}`}
+                      onClick={() => setSaveCellType('line')}>
+                      <LineChart size={16} />
+                    </button>
+                    <button className={`viz-btn ${saveCellType === 'bar' ? 'active' : ''}`}
+                      onClick={() => setSaveCellType('bar')}>
+                      <BarChart2 size={16} />
+                    </button>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>{t('views.dashboards.title')}</label>
+                  <select
+                    className="form-select"
+                    value={saveDashboardId}
+                    onChange={e => {
+                      setSaveDashboardId(e.target.value);
+                      if (e.target.value !== '__new__') {
+                        setSaveNewName('');
+                        setSaveNewDesc('');
+                      }
+                    }}
+                  >
+                    <option value="">-- {t('views.dashboards.createDashboard')} --</option>
+                    {existingDashboards.map((d: any) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {saveDashboardId === '' && (
+                  <>
+                    <div className="form-group">
+                      <label>{t('views.dashboards.nameLabel')}</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder={t('views.dashboards.namePlaceholder')}
+                        value={saveNewName}
+                        onChange={e => setSaveNewName(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>{t('views.dashboards.descriptionLabel')}</label>
+                      <textarea
+                        className="form-textarea"
+                        placeholder={t('views.dashboards.descriptionPlaceholder')}
+                        value={saveNewDesc}
+                        onChange={e => setSaveNewDesc(e.target.value)}
+                        rows={2}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-outlined" onClick={() => setShowSaveDashboardModal(false)}>
+                  {t('views.dataExplorer.cancel')}
+                </button>
+                <button className="btn btn-primary" onClick={handleSaveToDashboard}>
+                  {t('views.dashboards.save')}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {showSavedToast && (
+        <div className="saved-toast">
+          <span>{t('views.dataExplorer.savedToDashboard')}</span>
+          <button className="saved-toast-link" onClick={handleGoToDashboards}>
+            {t('views.dataExplorer.goToDashboards')}
+            <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
+    </div>
         </div>
       </div>
 
@@ -1288,7 +1583,13 @@ const DataExplorer: React.FC = () => {
                 className="btn btn-primary"
                 onClick={() => {
                   setShowTimeModal(false);
-                  updateSQL(activeTab.expandedTable, activeTab.selectedColumns, 'custom', activeTab.customStart, activeTab.customEnd);
+                  setTabs(prev => prev.map(t => {
+                    if (t.id === activeTabId) {
+                      const newSql = applyTimeRangeToQuery(t.queryCode, 'custom', activeTab.customStart, activeTab.customEnd);
+                      return { ...t, queryCode: newSql };
+                    }
+                    return t;
+                  }));
                 }}
               >
                 {t('views.dataExplorer.apply')}
@@ -1298,52 +1599,126 @@ const DataExplorer: React.FC = () => {
         </div>
       )}
 
-      {/* Query History Modal */}
-      {showHistoryModal && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '600px', width: '90%' }}>
-            <div className="modal-header">
+      {/* Query History & Favorites Drawer */}
+      {showDrawer && (
+        <div className="drawer-overlay" onClick={() => setShowDrawer(false)}>
+          <div className="drawer-content" onClick={e => e.stopPropagation()}>
+            <div className="drawer-header">
               <h3>{t('views.dataExplorer.queryHistoryTitle')}</h3>
+              <button className="icon-btn" onClick={() => setShowDrawer(false)}>
+                <X size={18} />
+              </button>
             </div>
-            <div className="modal-body" style={{ height: '400px', overflowY: 'auto', padding: 0 }}>
-              {queryHistory.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '40px' }}>{t('views.dataExplorer.noHistoryYet')}</p>
-              ) : (
-                <div>
-                  {queryHistory.map(item => (
-                    <div
-                      key={item.id}
-                      className="history-item"
-                      onClick={() => {
-                        updateActiveTab({ queryCode: item.query });
-                        setShowHistoryModal(false);
-                      }}
-                    >
-                      <div className="history-time">
-                        {new Date(item.timestamp).toLocaleString(i18n.language)}
+
+            <div className="drawer-tabs">
+              <div
+                className={`drawer-tab${drawerTab === 'history' ? ' active' : ''}`}
+                onClick={() => setDrawerTab('history')}
+              >
+                {t('views.dataExplorer.historyTab')}
+              </div>
+              <div
+                className={`drawer-tab${drawerTab === 'favorites' ? ' active' : ''}`}
+                onClick={() => setDrawerTab('favorites')}
+              >
+                {t('views.dataExplorer.favoritesTab')}
+              </div>
+            </div>
+
+            <div className="drawer-body">
+              {drawerTab === 'history' ? (
+                queryHistory.length === 0 ? (
+                  <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '40px' }}>{t('views.dataExplorer.noHistoryYet')}</p>
+                ) : (
+                  <div>
+                    {queryHistory.map(item => (
+                      <div key={item.id} className="history-item">
+                        <div className="history-item-header">
+                          <div className="history-time">
+                            {new Date(item.timestamp).toLocaleString(i18n.language)}
+                          </div>
+                          <div className="history-item-actions">
+                            <button
+                              className={`history-action-btn star${isFavorite(item.id) ? ' active' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFavorite(item);
+                              }}
+                              title={isFavorite(item.id) ? t('views.dataExplorer.removeFromFavorites') : t('views.dataExplorer.addToFavorites')}
+                            >
+                              <Star size={14} fill={isFavorite(item.id) ? '#fadb14' : 'none'} />
+                            </button>
+                          </div>
+                        </div>
+                        <pre
+                          className="history-query history-query-clickable"
+                          onClick={() => {
+                            updateActiveTab({ queryCode: item.query });
+                            setShowDrawer(false);
+                          }}
+                        >
+                          {item.query}
+                        </pre>
                       </div>
-                      <pre className="history-query">
-                        {item.query}
-                      </pre>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                favoriteQueries.length === 0 ? (
+                  <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '40px' }}>{t('views.dataExplorer.noFavoritesYet')}</p>
+                ) : (
+                  <div>
+                    {favoriteQueries.map(item => (
+                      <div key={item.id} className="history-item">
+                        <div className="history-item-header">
+                          <div className="history-time">
+                            {new Date(item.timestamp).toLocaleString(i18n.language)}
+                          </div>
+                          <div className="history-item-actions">
+                            <button
+                              className="history-action-btn star active"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFavorite(item);
+                              }}
+                              title={t('views.dataExplorer.removeFromFavorites')}
+                            >
+                              <Star size={14} fill="#fadb14" />
+                            </button>
+                          </div>
+                        </div>
+                        <pre
+                          className="history-query history-query-clickable"
+                          onClick={() => {
+                            updateActiveTab({ queryCode: item.query });
+                            setShowDrawer(false);
+                          }}
+                        >
+                          {item.query}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                )
               )}
             </div>
-            <div className="modal-footer">
-              <button
-                className="btn btn-outlined"
-                onClick={() => {
-                  setQueryHistory([]);
-                  localStorage.removeItem('queryHistory');
-                }}
-                disabled={queryHistory.length === 0}
-              >
-                {t('views.dataExplorer.clearHistory')}
-              </button>
+
+            <div className="drawer-footer">
+              {drawerTab === 'history' && (
+                <button
+                  className="btn btn-outlined"
+                  onClick={() => {
+                    setQueryHistory([]);
+                    localStorage.removeItem('queryHistory');
+                  }}
+                  disabled={queryHistory.length === 0}
+                >
+                  {t('views.dataExplorer.clearHistory')}
+                </button>
+              )}
               <button
                 className="btn btn-primary"
-                onClick={() => setShowHistoryModal(false)}
+                onClick={() => setShowDrawer(false)}
               >
                 {t('views.dataExplorer.close')}
               </button>

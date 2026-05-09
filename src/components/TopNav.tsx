@@ -21,15 +21,11 @@ const TopNav: React.FC<TopNavProps> = ({ toggleSidebar, pageTitle }) => {
           <Menu size={20} />
         </button>
         <div className="brand">
-          <svg className="brand-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M16 2L2 9.5V22.5L16 30L30 22.5V9.5L16 2Z" fill="var(--accent-primary)"/>
-            <path d="M16 6.5L6.5 11.5V19.5L16 24.5L25.5 19.5V11.5L16 6.5Z" fill="#fff"/>
-          </svg>
-          <span className="brand-name">IotEdge DB</span>
+          <img src="/img/logo.png" alt="IotEdge DB Logo" className="brand-logo" />
           <span className="page-title">{pageTitle}</span>
         </div>
       </div>
-      
+
       <div className="nav-right">
         <span className="version">v1.6.2</span>
         <select
