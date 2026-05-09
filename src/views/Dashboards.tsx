@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   Plus, Search, Upload, MoreVertical, Edit, Trash2, Download,
   ArrowLeft, RefreshCw, Maximize2, Minimize2, X, ChevronDown,
-  LayoutDashboard, Clock
+  LayoutDashboard, Clock, Table2, LineChart, BarChart2
 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 import { useTranslation } from 'react-i18next';
@@ -116,6 +116,7 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
   const [cellMenuOpen, setCellMenuOpen] = useState<string | null>(null);
   const [renameCellId, setRenameCellId] = useState<string | null>(null);
   const [renameCellName, setRenameCellName] = useState('');
+  const [renameCellType, setRenameCellType] = useState<'table' | 'line' | 'bar'>('line');
   const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [showCustomTimeModal, setShowCustomTimeModal] = useState(false);
@@ -499,6 +500,7 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
     const cell = currentDashboard?.cells.find(c => c.id === cellId);
     if (cell) {
       setRenameCellName(cell.name);
+      setRenameCellType(cell.type);
       setRenameCellId(cellId);
     }
     setCellMenuOpen(null);
@@ -511,7 +513,7 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
       return {
         ...d,
         updatedAt: Date.now(),
-        cells: d.cells.map(c => c.id === renameCellId ? { ...c, name: renameCellName.trim() } : c)
+        cells: d.cells.map(c => c.id === renameCellId ? { ...c, name: renameCellName.trim(), type: renameCellType } : c)
       };
     }));
     setRenameCellId(null);
@@ -1028,6 +1030,20 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
                   onChange={e => setRenameCellName(e.target.value)}
                   autoFocus
                 />
+              </div>
+              <div className="form-group" style={{ marginTop: '16px' }}>
+                <label>{t('views.dashboards.visualizationType', 'Visualization Type')}</label>
+                <div className="viz-type-switcher">
+                  <button className={`viz-btn ${renameCellType === 'table' ? 'active' : ''}`} onClick={() => setRenameCellType('table')}>
+                    <Table2 size={16} />
+                  </button>
+                  <button className={`viz-btn ${renameCellType === 'line' ? 'active' : ''}`} onClick={() => setRenameCellType('line')}>
+                    <LineChart size={16} />
+                  </button>
+                  <button className={`viz-btn ${renameCellType === 'bar' ? 'active' : ''}`} onClick={() => setRenameCellType('bar')}>
+                    <BarChart2 size={16} />
+                  </button>
+                </div>
               </div>
             </div>
             <div className="modal-footer">

@@ -289,6 +289,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
   const [saveCellType, setSaveCellType] = useState<'table' | 'line' | 'bar'>('line');
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [editingCellId, setEditingCellId] = useState<string | null>(null);
+  const [editingCellName, setEditingCellName] = useState<string>('');
   const [editingDashboardId, setEditingDashboardId] = useState<string | null>(null);
 
   const schemaCacheRef = useRef<Record<string, any>>({});
@@ -301,7 +302,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
     try {
       const pending = localStorage.getItem('iotedge-pending-query');
       if (pending) {
-        const { text, database, cellId, dashboardId } = JSON.parse(pending);
+        const { text, database, cellId, dashboardId, cellName } = JSON.parse(pending);
         const newId = Date.now().toString();
         setTabs(prev => [
           ...prev,
@@ -323,6 +324,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
         setActiveTabId(newId);
         if (database) setSelectedDb(database);
         if (cellId) setEditingCellId(cellId);
+        if (cellName) setEditingCellName(cellName);
         if (dashboardId) setEditingDashboardId(dashboardId);
         localStorage.removeItem('iotedge-pending-query');
       }
@@ -926,7 +928,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
   };
 
   const handleOpenSaveDashboard = () => {
-    setSaveCellName(activeTab.expandedTable || 'Query Cell');
+    setSaveCellName(editingCellId ? editingCellName : (activeTab.expandedTable || 'Query Cell'));
     setSaveDashboardId(editingDashboardId || '');
     setSaveNewName('');
     setSaveNewDesc('');
@@ -987,6 +989,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
         };
       });
       setEditingCellId(null);
+      setEditingCellName('');
       setEditingDashboardId(null);
     } else if (!saveDashboardId) {
       dashboards.push({
