@@ -28,3 +28,9 @@
   --ifm-color-primary-lightest: #dbecff;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
+
+/* Shift the search box to the left to be closer to the scaled logo */
+.navbar-search-left-shift {
+  margin-left: -30px;
+}
+

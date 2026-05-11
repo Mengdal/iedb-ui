@@ -4,7 +4,7 @@
 // There are various equivalent ways to declare your Docusaurus config.
 // See: https://docusaurus.io/docs/api/docusaurus-config
 
-import {themes as prismThemes} from 'prism-react-renderer';
+import { themes as prismThemes } from 'prism-react-renderer';
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
@@ -108,13 +108,20 @@ const config = {
         },
       },
       navbar: {
-        title: 'IotEdge DB',
+        title: '',
         logo: {
           alt: '高性能列式分析型数据库',
           src: 'img/logo.png',
+          style: {
+            // 缩小到 80%，可自行调整比例
+            transform: 'scale(0.7)',
+            // 如果上下不居中，可以通过调整 marginTop 的数值来微调
+            // 正数（如 '5px'）会让 logo 往下移，负数（如 '-5px'）会让 logo 往上移
+            marginTop: '2px',
+          },
         },
         items: [
-          {type: 'search', position: 'left'},
+          { type: 'search', position: 'left', className: 'navbar-search-left-shift' },
           {
             type: 'docsVersionDropdown',
             position: 'right', // 放在导航栏右侧
@@ -125,7 +132,7 @@ const config = {
             position: 'left',
             label: '教程',
           },
-          {to: '/blog', label: '博客', position: 'left'},
+          { to: '/blog', label: '博客', position: 'left' },
           {
             href: 'https://www.lmgateway.com/',
             label: 'Website',
