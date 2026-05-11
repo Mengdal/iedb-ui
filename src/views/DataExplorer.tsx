@@ -650,17 +650,10 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
       return sql.replace(customRegex, timeCondition);
     }
 
-    if (/WHERE/i.test(sql)) {
-      return sql.replace(/WHERE/i, `WHERE ${timeCondition} AND `);
-    } else if (/GROUP BY/i.test(sql)) {
-      return sql.replace(/GROUP BY/i, `WHERE ${timeCondition} GROUP BY`);
-    } else if (/ORDER BY/i.test(sql)) {
-      return sql.replace(/ORDER BY/i, `WHERE ${timeCondition} ORDER BY`);
-    } else if (/LIMIT/i.test(sql)) {
-      return sql.replace(/LIMIT/i, `WHERE ${timeCondition} LIMIT`);
-    } else {
-      return `${sql} WHERE ${timeCondition}`;
-    }
+    // Only replace existing time conditions. If user's SQL has no time condition,
+    // we respect their intent (e.g. LIMIT 1 "get latest" queries, WHERE path='/' etc.)
+    // and do NOT force-inject a time filter.
+    return sql;
   };
 
   const handleTimeRangeChange = (val: string) => {

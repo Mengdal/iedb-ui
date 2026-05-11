@@ -330,17 +330,10 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
       return sql.replace(customRegex, timeCondition);
     }
 
-    if (/WHERE/i.test(sql)) {
-      return sql.replace(/WHERE/i, `WHERE ${timeCondition} AND `);
-    } else if (/GROUP BY/i.test(sql)) {
-      return sql.replace(/GROUP BY/i, `WHERE ${timeCondition} GROUP BY`);
-    } else if (/ORDER BY/i.test(sql)) {
-      return sql.replace(/ORDER BY/i, `WHERE ${timeCondition} ORDER BY`);
-    } else if (/LIMIT/i.test(sql)) {
-      return sql.replace(/LIMIT/i, `WHERE ${timeCondition} LIMIT`);
-    } else {
-      return `${sql} WHERE ${timeCondition}`;
-    }
+    // If we didn't find our specific time macro patterns, we respect the user's custom SQL 
+    // and DO NOT forcefully inject a time condition. This allows queries like `ORDER BY time DESC LIMIT 1` 
+    // to work globally without being restricted by the dashboard time range.
+    return sql;
   };
 
   const refreshAllCells = useCallback(async () => {
