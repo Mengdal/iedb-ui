@@ -427,7 +427,11 @@
       "selectCustomTimeRangeTitle": "选择自定义时间范围",
       "startTimeLabel": "开始时间",
       "endTimeLabel": "结束时间（可选）",
-      "apply": "应用"
+      "apply": "应用",
+      "chartError": "无法绘制图表",
+      "noNumericColumns": "查询结果中没有可绘图的数值列",
+      "noNumericColumnsHint": "请将 Cell 类型改为 Table，或修改 SQL 以包含数值列",
+      "noDataToChart": "没有数据可绘制图表"
     },
     "integrations": {
       "title": "集成",
@@ -548,6 +552,7 @@
       "runQuery": "运行查询",
       "executingQuery": "正在执行查询...",
       "runAQueryToSeeResults": "运行查询以在此处查看结果",
+      "chartError": "无法绘制图表",
       "noDataToChart": "暂无可用于图表的数据",
       "rowsInTime": "{{rows}} 行，耗时 {{ms}} 毫秒",
       "export": "导出",
@@ -563,7 +568,9 @@
       "cancel": "取消",
       "saveToDashboard": "保存至仪表盘",
       "savedToDashboard": "已保存至仪表盘",
-      "goToDashboards": "前往仪表盘"
+      "goToDashboards": "前往仪表盘",
+      "database": "数据库",
+      "selectDatabase": "默认"
     },
     "writeData": {
       "noServerTitle": "未选择服务器",

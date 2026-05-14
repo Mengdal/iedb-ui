@@ -7,7 +7,7 @@ import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import { useTranslation } from 'react-i18next';
 import { useServers } from '../contexts/ServerContext';
 import type { CurrentView } from '../App';
-import { buildChartOption, downloadFile } from '../utils/chartUtils';
+import { buildChartOption, downloadFile, isChartError } from '../utils/chartUtils';
 import './DataExplorer.css';
 
 interface DatabaseItem {
@@ -61,7 +61,7 @@ export const getSelectedTagValues = (sql: string, column: string): string[] => {
   if (inMatch) {
     return inMatch[1].split(',').map(s => s.trim().replace(/^'(.*)'$/, '$1').replace(/^"(.*)"$/, '$1')).filter(s => s.length > 0);
   }
-  
+
   const eqRegex = new RegExp(`\\b${column}\\s*=\\s*'([^']+)'`, 'i');
   const eqMatch = sql.match(eqRegex);
   if (eqMatch) {
@@ -120,9 +120,9 @@ const TagDropdown = ({ tableName, columnName, activeServer, selectedDb, onSelect
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }} className={isOpen ? "h-full flex flex-col overflow-hidden" : ""}>
       <div className="tree-leaf" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px' }}>
         {children}
-        <button 
+        <button
           type="button"
-          className="icon-btn-small" 
+          className="icon-btn-small"
           onClick={handleToggle}
           title={t('views.dataExplorer.filterTag', 'Filter Tag')}
           style={{ padding: '2px', marginLeft: '4px', opacity: 0.7 }}
@@ -133,8 +133,8 @@ const TagDropdown = ({ tableName, columnName, activeServer, selectedDb, onSelect
         </button>
       </div>
       {isOpen && (
-        <div 
-          className="tag-dropdown-menu flex flex-col overflow-hidden" 
+        <div
+          className="tag-dropdown-menu flex flex-col overflow-hidden"
           style={{
             backgroundColor: 'var(--bg-panel)',
             border: '1px solid var(--border-color)',
@@ -146,62 +146,62 @@ const TagDropdown = ({ tableName, columnName, activeServer, selectedDb, onSelect
           }}
           onClick={(e) => e.stopPropagation()}
         >
-            <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-surface)', borderRadius: '4px', padding: '4px 8px' }}>
-                <Search size={12} color="var(--text-secondary)" style={{ marginRight: '6px' }} />
-                <input 
-                  type="text" 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t('views.dataExplorer.searchPlaceholder', 'Search...')}
-                  style={{ border: 'none', background: 'transparent', outline: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '12px' }}
-                />
-              </div>
+          <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-surface)', borderRadius: '4px', padding: '4px 8px' }}>
+              <Search size={12} color="var(--text-secondary)" style={{ marginRight: '6px' }} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t('views.dataExplorer.searchPlaceholder', 'Search...')}
+                style={{ border: 'none', background: 'transparent', outline: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '12px' }}
+              />
             </div>
+          </div>
 
-            <div style={{ maxHeight: '180px', overflowY: 'auto', padding: '4px 0' }}>
-              {isLoading ? (
-                <div style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center' }}>
-                  <Loader2 size={14} className="spin" style={{ margin: '0 auto' }} />
-                </div>
-              ) : filteredValues.length > 0 ? (
-                filteredValues.map((v, i) => (
-                  <label 
-                    key={i} 
-                    style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      padding: '6px 12px', 
-                      fontSize: '12px', 
-                      cursor: 'pointer',
-                      color: 'var(--text-primary)',
-                      gap: '8px'
+          <div style={{ maxHeight: '180px', overflowY: 'auto', padding: '4px 0' }}>
+            {isLoading ? (
+              <div style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                <Loader2 size={14} className="spin" style={{ margin: '0 auto' }} />
+              </div>
+            ) : filteredValues.length > 0 ? (
+              filteredValues.map((v, i) => (
+                <label
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    color: 'var(--text-primary)',
+                    gap: '8px'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checkedValues.includes(v)}
+                    onChange={(e) => {
+                      let newChecked = [];
+                      if (e.target.checked) {
+                        newChecked = [...checkedValues, v];
+                      } else {
+                        newChecked = checkedValues.filter(item => item !== v);
+                      }
+                      setCheckedValues(newChecked);
+                      onSelectValue(newChecked);
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface)'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    <input 
-                      type="checkbox" 
-                      checked={checkedValues.includes(v)}
-                      onChange={(e) => {
-                        let newChecked = [];
-                        if (e.target.checked) {
-                          newChecked = [...checkedValues, v];
-                        } else {
-                          newChecked = checkedValues.filter(item => item !== v);
-                        }
-                        setCheckedValues(newChecked);
-                        onSelectValue(newChecked);
-                      }}
-                    />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
-                  </label>
-                ))
-              ) : (
-                <div style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {t('views.dataExplorer.noData', 'No values found')}
-                </div>
-              )}
+                  />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
+                </label>
+              ))
+            ) : (
+              <div style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                {t('views.dataExplorer.noData', 'No values found')}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -287,12 +287,19 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
   const [saveNewName, setSaveNewName] = useState('');
   const [saveNewDesc, setSaveNewDesc] = useState('');
   const [saveCellType, setSaveCellType] = useState<'table' | 'line' | 'bar'>('line');
+  const [saveSelectedDb, setSaveSelectedDb] = useState('');
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [editingCellId, setEditingCellId] = useState<string | null>(null);
   const [editingCellName, setEditingCellName] = useState<string>('');
   const [editingDashboardId, setEditingDashboardId] = useState<string | null>(null);
 
   const schemaCacheRef = useRef<Record<string, any>>({});
+  const selectedDbRef = useRef(selectedDb);
+  selectedDbRef.current = selectedDb;
+  const editingCellIdRef = useRef(editingCellId);
+  editingCellIdRef.current = editingCellId;
+  const editingDashboardIdRef = useRef(editingDashboardId);
+  editingDashboardIdRef.current = editingDashboardId;
 
   const updateActiveTab = (updates: Partial<QueryTab>) => {
     setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, ...updates } : t));
@@ -302,7 +309,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
     try {
       const pending = localStorage.getItem('iotedge-pending-query');
       if (pending) {
-        const { text, database, cellId, dashboardId, cellName } = JSON.parse(pending);
+        const { text, database, cellId, dashboardId, cellName, cellType } = JSON.parse(pending);
         const newId = Date.now().toString();
         setTabs(prev => [
           ...prev,
@@ -316,7 +323,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
             timeRange: '1 hour',
             customStart: '',
             customEnd: '',
-            visualization: 'table',
+            visualization: (cellType === 'line' || cellType === 'bar' || cellType === 'table') ? cellType : 'table',
             currentPage: 1,
             pageSize: 32
           }
@@ -345,9 +352,6 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
       .then(data => {
         if (data && data.databases) {
           setDatabases(data.databases);
-          if (data.databases.length > 0) {
-            setSelectedDb(data.databases[0].name);
-          }
         }
       })
       .catch(console.error)
@@ -368,9 +372,8 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
         if (data && data.databases) {
           setDatabases(data.databases);
           if (data.databases.length > 0) {
-            // Verify if current select is still valid, else jump to max
             const match = data.databases.find((d: any) => d.name === selectedDb);
-            if (!match) setSelectedDb(data.databases[0].name);
+            if (!match) setSelectedDb('');
           } else {
             setSelectedDb('');
           }
@@ -420,7 +423,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
                       }
                     }
                   })
-                  .catch(() => {}); // silent catch for background prefetch
+                  .catch(() => { }); // silent catch for background prefetch
               }
             });
           }
@@ -456,47 +459,47 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
 
         // Option 2: Completely overwrite SQL when switching to a new table to avoid regex corruption
         if (isNewTable && table) {
-           const colsStr = columns.length > 0 ? columns.join(',\n  ') : '*';
-           updatedCode = `SELECT\n  ${colsStr}\nFROM ${table}\nWHERE\n  ${timeClause}\nLIMIT 1000`;
-           return { ...t, queryCode: updatedCode };
+          const colsStr = columns.length > 0 ? columns.join(',\n  ') : '*';
+          updatedCode = `SELECT\n  ${colsStr}\nFROM ${table}\nWHERE\n  ${timeClause}\nLIMIT 1000`;
+          return { ...t, queryCode: updatedCode };
         }
 
         if (!updatedCode && table) {
-           const colsStr = columns.length > 0 ? columns.join(',\n  ') : '*';
-           updatedCode = `SELECT\n  ${colsStr}\nFROM ${table}\nWHERE\n  ${timeClause}\nLIMIT 1000`;
-           return { ...t, queryCode: updatedCode };
+          const colsStr = columns.length > 0 ? columns.join(',\n  ') : '*';
+          updatedCode = `SELECT\n  ${colsStr}\nFROM ${table}\nWHERE\n  ${timeClause}\nLIMIT 1000`;
+          return { ...t, queryCode: updatedCode };
         }
 
         let tagFilters = '';
         if (!isNewTable) {
-           const whereMatch = updatedCode.match(/WHERE([\s\S]*?)(?=LIMIT|$)/i);
-           if (whereMatch) {
-             tagFilters = whereMatch[1];
-             tagFilters = tagFilters.replace(/\btime\s*[<>=]+\s*(?:now\(\)(?:\s*-\s*interval\s+'[^']+')?|'[^']+')/gi, '___TIME___');
-             tagFilters = tagFilters.replace(/___TIME___\s+AND\s+/gi, '');
-             tagFilters = tagFilters.replace(/\s+AND\s+___TIME___/gi, '');
-             tagFilters = tagFilters.replace(/___TIME___/gi, '');
-             tagFilters = tagFilters.trim();
-           }
+          const whereMatch = updatedCode.match(/WHERE([\s\S]*?)(?=LIMIT|$)/i);
+          if (whereMatch) {
+            tagFilters = whereMatch[1];
+            tagFilters = tagFilters.replace(/\btime\s*[<>=]+\s*(?:now\(\)(?:\s*-\s*interval\s+'[^']+')?|'[^']+')/gi, '___TIME___');
+            tagFilters = tagFilters.replace(/___TIME___\s+AND\s+/gi, '');
+            tagFilters = tagFilters.replace(/\s+AND\s+___TIME___/gi, '');
+            tagFilters = tagFilters.replace(/___TIME___/gi, '');
+            tagFilters = tagFilters.trim();
+          }
         }
 
         if (table) {
-           const colsStr = columns.length > 0 ? columns.join(',\n  ') : '*';
-           if (updatedCode.match(/SELECT\s+[\s\S]*?\s+FROM/i)) {
-             updatedCode = updatedCode.replace(/SELECT\s+[\s\S]*?\s+FROM/i, `SELECT\n  ${colsStr}\nFROM`);
-           }
-           if (updatedCode.match(/FROM\s+"?[a-zA-Z0-9_-]+"?(?=\s*(?:WHERE|LIMIT|$))/i)) {
-             updatedCode = updatedCode.replace(/FROM\s+"?[a-zA-Z0-9_-]+"?(?=\s*(?:WHERE|LIMIT|$))/i, `FROM ${table}`);
-           }
-           if (!updatedCode.includes('WHERE')) {
-             if (updatedCode.includes('LIMIT')) {
-               updatedCode = updatedCode.replace(/LIMIT/i, `WHERE\n  ${timeClause}\nLIMIT`);
-             } else {
-               updatedCode += `\nWHERE\n  ${timeClause}`;
-             }
-           }
-        } 
-        
+          const colsStr = columns.length > 0 ? columns.join(',\n  ') : '*';
+          if (updatedCode.match(/SELECT\s+[\s\S]*?\s+FROM/i)) {
+            updatedCode = updatedCode.replace(/SELECT\s+[\s\S]*?\s+FROM/i, `SELECT\n  ${colsStr}\nFROM`);
+          }
+          if (updatedCode.match(/FROM\s+"?[a-zA-Z0-9_-]+"?(?=\s*(?:WHERE|LIMIT|$))/i)) {
+            updatedCode = updatedCode.replace(/FROM\s+"?[a-zA-Z0-9_-]+"?(?=\s*(?:WHERE|LIMIT|$))/i, `FROM ${table}`);
+          }
+          if (!updatedCode.includes('WHERE')) {
+            if (updatedCode.includes('LIMIT')) {
+              updatedCode = updatedCode.replace(/LIMIT/i, `WHERE\n  ${timeClause}\nLIMIT`);
+            } else {
+              updatedCode += `\nWHERE\n  ${timeClause}`;
+            }
+          }
+        }
+
         const whereIndex = updatedCode.toUpperCase().indexOf('WHERE');
         if (whereIndex !== -1) {
           let limitIndex = updatedCode.toUpperCase().indexOf('LIMIT', whereIndex);
@@ -570,7 +573,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
   const handleTagValueSelect = (column: string, values: string[] | string) => {
     const vals = Array.isArray(values) ? values : [values];
     const escapeString = (str: string) => typeof str === 'string' ? str.replace(/'/g, "''") : str;
-    
+
     let newCondition = '';
     if (vals.length === 1) {
       newCondition = `${column} = '${escapeString(vals[0])}'`;
@@ -578,7 +581,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
       const inVals = vals.map(v => `'${escapeString(v)}'`).join(", ");
       newCondition = `${column} IN (${inVals})`;
     }
-    
+
     setTabs(prev => prev.map(t => {
       if (t.id === activeTabId) {
         let sql = t.queryCode;
@@ -586,9 +589,9 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
 
         const singleInRegex = new RegExp(`\\b${column}\\s+IN\\s*\\(.*?\\)`, 'i');
         const singleEqRegex = new RegExp(`\\b${column}\\s*=\\s*'[^']+'`, 'i');
-        
+
         let hasOld = false;
-        
+
         if (singleInRegex.test(sql)) {
           hasOld = true;
           if (newCondition) {
@@ -597,14 +600,14 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
             sql = sql.replace(singleInRegex, '___TO_REMOVE___');
           }
         } else if (singleEqRegex.test(sql)) {
-           hasOld = true;
-           if (newCondition) {
-             sql = sql.replace(singleEqRegex, newCondition);
-           } else {
-             sql = sql.replace(singleEqRegex, '___TO_REMOVE___');
-           }
+          hasOld = true;
+          if (newCondition) {
+            sql = sql.replace(singleEqRegex, newCondition);
+          } else {
+            sql = sql.replace(singleEqRegex, '___TO_REMOVE___');
+          }
         }
-        
+
         if (!hasOld && newCondition) {
           if (sql.includes('WHERE')) {
             sql = sql.replace(/WHERE/i, `WHERE\n  ${newCondition} AND`);
@@ -619,8 +622,8 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
           sql = sql.replace(/AND\s+___TO_REMOVE___\s+AND/gi, 'AND ');
           sql = sql.replace(/WHERE\s+___TO_REMOVE___\s+AND/gi, 'WHERE\n  ');
           sql = sql.replace(/AND\s+___TO_REMOVE___(\s+LIMIT|\s*$)/gi, '$1');
-          sql = sql.replace(/WHERE\s+___TO_REMOVE___(\s+LIMIT|\s*$)/gi, '$1'); 
-          sql = sql.replace(/___TO_REMOVE___/g, ''); 
+          sql = sql.replace(/WHERE\s+___TO_REMOVE___(\s+LIMIT|\s*$)/gi, '$1');
+          sql = sql.replace(/___TO_REMOVE___/g, '');
           sql = sql.replace(/WHERE\s*(LIMIT|\s*$)/i, '$1');
         }
 
@@ -788,11 +791,11 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
       const systemPrompt = `You are an NL2SQL assistant for IotEdge DB (DuckDB/InfluxDB SQL compatible). You MUST call tools to get schema/context before generating SQL. Only output SQL, no markdown, no explanation. Only SELECT is allowed.`;
 
       let userPrompt = `Database: ${selectedDb}\n\n`;
-      
+
       if (customInstructions) {
         userPrompt += `User Custom Instructions:\n${customInstructions}\n\n`;
       }
-      
+
       userPrompt += `Important Rule: 单表列引用规则。当查询只有一张表（无 JOIN）时，列名不要加表名前缀。例如写 AVG(usage)，不要写 AVG(cpu.usage)。\n\n`;
 
       userPrompt += `Schema:\n${JSON.stringify(schemaSnapshot, null, 2)}\n\n`;
@@ -926,13 +929,14 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
     setSaveNewName('');
     setSaveNewDesc('');
     setSaveCellType(activeTab.visualization as 'table' | 'line' | 'bar');
+    setSaveSelectedDb(selectedDb);
     setShowSaveDashboardModal(true);
   };
 
   const handleSaveToDashboard = () => {
     if (!saveCellName.trim()) return;
     const cellName = saveCellName.trim();
-    const DASH_KEY = 'iotedge-dashboards';
+    const DASH_KEY = `iotedge-dashboards-${activeServer?.id || 'default'}`;
     let dashboards: any[];
     try {
       dashboards = JSON.parse(localStorage.getItem(DASH_KEY) || '[]');
@@ -947,7 +951,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
       queries: [{
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         text: activeTab.queryCode,
-        database: selectedDb
+        database: saveSelectedDb
       }],
       w: 4,
       h: 3,
@@ -960,14 +964,14 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
       targetId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     }
 
-    if (editingCellId && editingDashboardId) {
+    if (editingCellIdRef.current && editingDashboardIdRef.current) {
       dashboards = dashboards.map(d => {
-        if (d.id !== editingDashboardId) return d;
+        if (d.id !== editingDashboardIdRef.current) return d;
         return {
           ...d,
           updatedAt: Date.now(),
           cells: d.cells.map((c: any) => {
-            if (c.id !== editingCellId) return c;
+            if (c.id !== editingCellIdRef.current) return c;
             return {
               ...c,
               name: cellName,
@@ -975,7 +979,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
               queries: [{
                 id: c.queries?.[0]?.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 text: activeTab.queryCode,
-                database: selectedDb
+                database: saveSelectedDb
               }]
             };
           })
@@ -1094,13 +1098,13 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
 
                       return isTag ? (
                         <div key={col} style={{ position: 'relative' }}>
-                          <TagDropdown 
-                            tableName={m.name} 
-                            columnName={col} 
-                            activeServer={activeServer} 
-                            selectedDb={selectedDb} 
+                          <TagDropdown
+                            tableName={m.name}
+                            columnName={col}
+                            activeServer={activeServer}
+                            selectedDb={selectedDb}
                             initialChecked={getSelectedTagValues(activeTab.queryCode, col)}
-                            onSelectValue={(val: string[]) => handleTagValueSelect(col, val)} 
+                            onSelectValue={(val: string[]) => handleTagValueSelect(col, val)}
                           >
                             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               <input
@@ -1218,7 +1222,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
                 <option value="custom">{t('views.dataExplorer.custom')}</option>
               </select>
             )}
-            
+
             {queryMode === 'nl' && (
               <button
                 className="btn btn-primary"
@@ -1361,15 +1365,33 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
                 </table>
               </div>
             ) : (
-              (activeTab.queryResult?.success && activeTab.queryResult.data && activeTab.queryResult.data.length > 0) ? (
-                <div style={{ padding: '16px', height: '100%', minHeight: '300px', display: 'flex', flexDirection: 'column' }}>
-                  <ReactECharts
-                    option={buildChartOption(activeTab.visualization, activeTab.queryResult)}
-                    style={{ flex: 1, minHeight: '300px', width: '100%' }}
-                    opts={{ renderer: 'canvas' }}
-                  />
-                </div>
-              ) : (
+              (activeTab.queryResult?.success && activeTab.queryResult.data && activeTab.queryResult.data.length > 0) ? (() => {
+                const chartOption = buildChartOption(activeTab.visualization, activeTab.queryResult);
+                if (isChartError(chartOption)) {
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '200px', gap: '10px', padding: '20px' }}>
+                      <span style={{ color: '#f59e0b', fontSize: '15px', fontWeight: 500 }}>{t('views.dataExplorer.chartError')}</span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center', maxWidth: '480px', lineHeight: 1.6 }}>
+                        {chartOption.chartError}
+                      </span>
+                    </div>
+                  );
+                }
+                return chartOption ? (
+                  <div style={{ padding: '16px', height: '100%', minHeight: '300px', display: 'flex', flexDirection: 'column' }}>
+                    <ReactECharts
+                      option={chartOption}
+                      notMerge={true}
+                      style={{ flex: 1, minHeight: '300px', width: '100%' }}
+                      opts={{ renderer: 'canvas' }}
+                    />
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                    {t('views.dataExplorer.noDataToChart')}
+                  </div>
+                );
+              })() : (
                 <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
                   {isQuerying ? t('views.dataExplorer.executingQuery') : t('views.dataExplorer.noDataToChart')}
                 </div>
@@ -1416,123 +1438,136 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
                   >
                     <ChevronRight size={16} />
                   </button>
-          </div>
-        </div>
-      )}
-
-      {showSaveDashboardModal && (() => {
-        const DASH_KEY = 'iotedge-dashboards';
-        let existingDashboards: any[];
-        try {
-          existingDashboards = JSON.parse(localStorage.getItem(DASH_KEY) || '[]');
-        } catch {
-          existingDashboards = [];
-        }
-        return (
-          <div className="modal-overlay" onClick={() => setShowSaveDashboardModal(false)}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
-              <div className="modal-header">
-                <h3>{t('views.dataExplorer.saveToDashboard')}</h3>
-                <button className="icon-btn" onClick={() => setShowSaveDashboardModal(false)}>
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label>{t('views.dashboards.cellNameLabel')}</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder={t('views.dashboards.cellNamePlaceholder')}
-                    value={saveCellName}
-                    onChange={e => setSaveCellName(e.target.value)}
-                    autoFocus
-                  />
                 </div>
-                <div className="form-group">
-                  <label>{t('views.dashboards.visualizationType')}</label>
-                  <div className="viz-type-switcher">
-                    <button className={`viz-btn ${saveCellType === 'table' ? 'active' : ''}`}
-                      onClick={() => setSaveCellType('table')}>
-                      <Table2 size={16} />
-                    </button>
-                    <button className={`viz-btn ${saveCellType === 'line' ? 'active' : ''}`}
-                      onClick={() => setSaveCellType('line')}>
-                      <LineChart size={16} />
-                    </button>
-                    <button className={`viz-btn ${saveCellType === 'bar' ? 'active' : ''}`}
-                      onClick={() => setSaveCellType('bar')}>
-                      <BarChart2 size={16} />
-                    </button>
+              </div>
+            )}
+
+            {showSaveDashboardModal && (() => {
+              const DASH_KEY = `iotedge-dashboards-${activeServer?.id || 'default'}`;
+              let existingDashboards: any[];
+              try {
+                existingDashboards = JSON.parse(localStorage.getItem(DASH_KEY) || '[]');
+              } catch {
+                existingDashboards = [];
+              }
+              return (
+                <div className="modal-overlay" onClick={() => setShowSaveDashboardModal(false)}>
+                  <div className="modal-content" onClick={e => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <h3>{t('views.dataExplorer.saveToDashboard')}</h3>
+                      <button className="icon-btn" onClick={() => setShowSaveDashboardModal(false)}>
+                        <X size={20} />
+                      </button>
+                    </div>
+                    <div className="modal-body">
+                      <div className="form-group">
+                        <label>{t('views.dashboards.cellNameLabel')}</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder={t('views.dashboards.cellNamePlaceholder')}
+                          value={saveCellName}
+                          onChange={e => setSaveCellName(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>{t('views.dashboards.visualizationType')}</label>
+                        <div className="viz-type-switcher">
+                          <button className={`viz-btn ${saveCellType === 'table' ? 'active' : ''}`}
+                            onClick={() => setSaveCellType('table')}>
+                            <Table2 size={16} />
+                          </button>
+                          <button className={`viz-btn ${saveCellType === 'line' ? 'active' : ''}`}
+                            onClick={() => setSaveCellType('line')}>
+                            <LineChart size={16} />
+                          </button>
+                          <button className={`viz-btn ${saveCellType === 'bar' ? 'active' : ''}`}
+                            onClick={() => setSaveCellType('bar')}>
+                            <BarChart2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="form-group">
+                        <label>{t('views.dataExplorer.database')}</label>
+                        <select
+                          className="form-select"
+                          value={saveSelectedDb}
+                          onChange={e => setSaveSelectedDb(e.target.value)}
+                        >
+                          <option value="">-- {t('views.dataExplorer.selectDatabase')} --</option>
+                          {databases.map(db => (
+                            <option key={db.name} value={db.name}>{db.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>{t('views.dashboards.title')}</label>
+                        <select
+                          className="form-select"
+                          value={saveDashboardId}
+                          onChange={e => {
+                            setSaveDashboardId(e.target.value);
+                            if (e.target.value !== '__new__') {
+                              setSaveNewName('');
+                              setSaveNewDesc('');
+                            }
+                          }}
+                        >
+                          <option value="">-- {t('views.dashboards.createDashboard')} --</option>
+                          {existingDashboards.map((d: any) => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {saveDashboardId === '' && (
+                        <>
+                          <div className="form-group">
+                            <label>{t('views.dashboards.nameLabel')}</label>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder={t('views.dashboards.namePlaceholder')}
+                              value={saveNewName}
+                              onChange={e => setSaveNewName(e.target.value)}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>{t('views.dashboards.descriptionLabel')}</label>
+                            <textarea
+                              className="form-textarea"
+                              placeholder={t('views.dashboards.descriptionPlaceholder')}
+                              value={saveNewDesc}
+                              onChange={e => setSaveNewDesc(e.target.value)}
+                              rows={2}
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <div className="modal-footer">
+                      <button className="btn btn-outlined" onClick={() => setShowSaveDashboardModal(false)}>
+                        {t('views.dataExplorer.cancel')}
+                      </button>
+                      <button className="btn btn-primary" onClick={handleSaveToDashboard}>
+                        {t('views.dashboards.save')}
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div className="form-group">
-                  <label>{t('views.dashboards.title')}</label>
-                  <select
-                    className="form-select"
-                    value={saveDashboardId}
-                    onChange={e => {
-                      setSaveDashboardId(e.target.value);
-                      if (e.target.value !== '__new__') {
-                        setSaveNewName('');
-                        setSaveNewDesc('');
-                      }
-                    }}
-                  >
-                    <option value="">-- {t('views.dashboards.createDashboard')} --</option>
-                    {existingDashboards.map((d: any) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
-                </div>
-                {saveDashboardId === '' && (
-                  <>
-                    <div className="form-group">
-                      <label>{t('views.dashboards.nameLabel')}</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder={t('views.dashboards.namePlaceholder')}
-                        value={saveNewName}
-                        onChange={e => setSaveNewName(e.target.value)}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>{t('views.dashboards.descriptionLabel')}</label>
-                      <textarea
-                        className="form-textarea"
-                        placeholder={t('views.dashboards.descriptionPlaceholder')}
-                        value={saveNewDesc}
-                        onChange={e => setSaveNewDesc(e.target.value)}
-                        rows={2}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="modal-footer">
-                <button className="btn btn-outlined" onClick={() => setShowSaveDashboardModal(false)}>
-                  {t('views.dataExplorer.cancel')}
-                </button>
-                <button className="btn btn-primary" onClick={handleSaveToDashboard}>
-                  {t('views.dashboards.save')}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+              );
+            })()}
 
-      {showSavedToast && (
-        <div className="saved-toast">
-          <span>{t('views.dataExplorer.savedToDashboard')}</span>
-          <button className="saved-toast-link" onClick={handleGoToDashboards}>
-            {t('views.dataExplorer.goToDashboards')}
-            <ArrowRight size={14} />
-          </button>
-        </div>
-      )}
-    </div>
+            {showSavedToast && (
+              <div className="saved-toast">
+                <span>{t('views.dataExplorer.savedToDashboard')}</span>
+                <button className="saved-toast-link" onClick={handleGoToDashboards}>
+                  {t('views.dataExplorer.goToDashboards')}
+                  <ArrowRight size={14} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

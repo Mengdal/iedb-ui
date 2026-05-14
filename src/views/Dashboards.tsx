@@ -40,7 +40,7 @@ const useResizeObserver = () => {
 
   return { width, containerRef };
 };
-import { buildChartOption, downloadFile } from '../utils/chartUtils';
+import { buildChartOption, downloadFile, isChartError } from '../utils/chartUtils';
 import type { QueryResponse } from './DataExplorer';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -76,7 +76,7 @@ interface Dashboard {
   autoRefresh: number;
 }
 
-const STORAGE_KEY = 'iotedge-dashboards';
+const getStorageKey = (serverId?: string) => `iotedge-dashboards-${serverId || 'default'}`;
 const VALID_TIME_RANGES = ['15 minutes', '1 hour', '6 hours', '24 hours', '7 days', '30 days', 'custom'];
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -93,7 +93,8 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dashboards, setDashboards] = useState<Dashboard[]>(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const key = getStorageKey(activeServer?.id);
+      const stored = localStorage.getItem(key);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -143,12 +144,23 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(dashboards));
+      localStorage.setItem(getStorageKey(activeServer?.id), JSON.stringify(dashboards));
     } catch {
       // ignore
     }
   }, [dashboards]);
 
+  // Reload dashboards when switching servers
+  useEffect(() => {
+    try {
+      const key = getStorageKey(activeServer?.id);
+      const stored = localStorage.getItem(key);
+      setDashboards(stored ? JSON.parse(stored) : []);
+      setSelectedId(null);
+    } catch {
+      setDashboards([]);
+    }
+  }, [activeServer?.id]);
   const currentDashboard = useMemo(
     () => dashboards.find(d => d.id === selectedId) || null,
     [dashboards, selectedId]
@@ -482,6 +494,7 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
       database: cell.queries[0]?.database || '',
       cellName: cell.name,
       cellId: cell.id,
+      cellType: cell.type,
       dashboardId: currentDashboard?.id || ''
     };
     localStorage.setItem('iotedge-pending-query', JSON.stringify(pending));
@@ -967,30 +980,53 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
                               {!hasData && (
                                 <tr>
                                   <td colSpan={result.columns?.length || 1} style={{ textAlign: 'center', padding: 20, color: 'var(--text-secondary)' }}>
-                                    {result.error || 'No data'}
+                                    {result.error || t('views.dashboards.noDataToChart')}
                                   </td>
                                 </tr>
                               )}
                             </tbody>
                           </table>
                         </div>
-                      ) : hasData ? (
-                        <ReactECharts
-                          ref={(e) => {
-                            if (e) {
-                              chartRefs.current.set(cell.id, e.getEchartsInstance());
-                            } else {
-                              chartRefs.current.delete(cell.id);
-                            }
-                          }}
-                          option={buildChartOption(cell.type as 'line' | 'bar', result)}
-                          style={{ height: '100%', width: '100%' }}
-                          opts={{ renderer: 'canvas' }}
-                        />
-                      ) : (
-                        <div className="cell-placeholder">
-                          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                            {result.error || 'No data to chart'}
+                      ) : hasData ? (() => {
+                        const chartOption = buildChartOption(cell.type as 'line' | 'bar', result);
+                        if (isChartError(chartOption)) {
+                          return (
+                            <div className="cell-placeholder" style={{ flexDirection: 'column', gap: 6 }}>
+                              <span style={{ color: '#f59e0b', fontSize: 13 }}>{t('views.dashboards.chartError')}</span>
+                              <span style={{ color: 'var(--text-secondary)', fontSize: 12, textAlign: 'center', maxWidth: '90%' }}>
+                                {chartOption.chartError}
+                              </span>
+                            </div>
+                          );
+                        }
+                        return chartOption ? (
+                          <ReactECharts
+                            ref={(e) => {
+                              if (e) {
+                                chartRefs.current.set(cell.id, e.getEchartsInstance());
+                              } else {
+                                chartRefs.current.delete(cell.id);
+                              }
+                            }}
+                            option={chartOption}
+                            notMerge={true}
+                            style={{ height: '100%', width: '100%' }}
+                            opts={{ renderer: 'canvas' }}
+                          />
+                        ) : (
+                          <div className="cell-placeholder" style={{ flexDirection: 'column', gap: 6 }}>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                              {t('views.dashboards.noNumericColumns')}
+                            </span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                              {t('views.dashboards.noNumericColumnsHint')}
+                            </span>
+                          </div>
+                        );
+                      })() : (
+                        <div className="cell-placeholder cell-placeholder-error">
+                          <span style={{ color: '#f59e0b', fontSize: 13 }}>
+                            {result.error || t('views.dashboards.noDataToChart')}
                           </span>
                         </div>
                       )}

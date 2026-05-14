@@ -422,7 +422,16 @@
       "past6h": "Past 6h",
       "past24h": "Past 24h",
       "past7d": "Past 7d",
-      "past30d": "Past 30d"
+      "past30d": "Past 30d",
+      "custom": "Custom...",
+      "selectCustomTimeRangeTitle": "Select Custom Time Range",
+      "startTimeLabel": "Start Time",
+      "endTimeLabel": "End Time (Optional)",
+      "apply": "Apply",
+      "chartError": "Cannot render chart",
+      "noNumericColumns": "No numeric columns in query results to chart",
+      "noNumericColumnsHint": "Change Cell type to Table, or modify SQL to include numeric columns",
+      "noDataToChart": "No data to chart"
     },
     "integrations": {
       "title": "Integrations",
@@ -565,6 +574,7 @@
       "runQuery": "Run Query",
       "executingQuery": "Executing query...",
       "runAQueryToSeeResults": "Run a query to see results here",
+      "chartError": "Cannot render chart",
       "noDataToChart": "No data to chart",
       "rowsInTime": "{{rows}} rows in {{ms}} ms",
 
@@ -583,7 +593,9 @@
       "cancel": "Cancel",
       "saveToDashboard": "Save to Dashboard",
       "savedToDashboard": "Saved to Dashboard",
-      "goToDashboards": "Go to Dashboards"
+      "goToDashboards": "Go to Dashboards",
+      "database": "Database",
+      "selectDatabase": "Default"
     },
 
     "writeData": {

@@ -139,7 +139,12 @@ const Servers: React.FC = () => {
                     required 
                     placeholder={t('views.servers.hostPlaceholder')}
                     value={formData.host}
-                    onChange={e => setFormData({ ...formData, host: e.target.value })}
+                    onChange={e => {
+                      // 自动去掉用户误粘贴的 http:// 或 https://
+                      let val = e.target.value;
+                      val = val.replace(/^https?:\/\//i, '');
+                      setFormData({ ...formData, host: val });
+                    }}
                   />
                 </div>
               </div>
