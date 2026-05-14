@@ -146,36 +146,39 @@ curl -H "Accept: application/json" http://localhost:8000/metrics
 ---
 
 ## 数据写入
-### POST /api/v1/write/msgpack
-高性能 MessagePack 二进制写入（推荐）。
+### POST /api/v1/write/line-protocol
+IEDB原生Line Protocol接口，用请求头而非查询参数。
 
 **Header：**
 
++ `Content-Type: text/plain`
 + `Authorization: Bearer TOKEN`
-+ `Content-Type: application/msgpack`
-+ `Content-Encoding: gzip`（可选）
-+ `x-iedb-database: default`（可选）
++ `x-iedb-database: default`- 目标数据库
 
-**Body (MessagePack):**
+**Body：**
 
-```json
-{
-  "m": "measurement_name",
-  "columns": {
-    "time": [1697472000000, 1697472001000],
-    "host": ["server01", "server02"],
-    "value": [45.2, 67.8]
-  }
-}
+```plain
+cpu,host=server01 usage=45.2 1697472000000000000
+mem,host=server01 used=8.2,total=16.0 1697472000000000000
 ```
 
-**响应：** `204 No Content`
+**示例：**
 
-### GET /api/v1/write/msgpack/stats
-MessagePack 接收统计信息。
+```bash
+curl -X POST "http://localhost:8000/api/v1/write/line-protocol" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "x-iedb-database: default" \
+  -d 'cpu,host=server01 usage=45.2'
+```
 
-### GET /api/v1/write/msgpack/spec
-MessagePack 格式规范。
+### POST /api/v1/write/line-protocol/flush
+强制将缓冲区数据刷新到磁盘。
+
+### GET /api/v1/write/line-protocol/stats
+行协议接收统计信息。
+
+### GET /api/v1/write/line-protocol/health
+行协议处理程序健康状况。
 
 ### POST /write
 兼容 InfluxDB 1.x 行协议的接口。此方法与 InfluxDB 的原生 API 相匹配，可实现即插即用的客户端兼容性。
@@ -191,13 +194,6 @@ MessagePack 格式规范。
 
 + `Content-Type: text/plain`
 + `Authorization: Bearer TOKEN`（或使用`p`查询参数）
-
-**Body：**
-
-```plain
-cpu,host=server01 usage=45.2 1697472000000000000
-mem,host=server01 used=8.2,total=16.0 1697472000000000000
-```
 
 **示例：**
 
@@ -228,23 +224,36 @@ curl -X POST "http://localhost:8000/api/v2/write?bucket=mydb&org=myorg" \
   -d 'cpu,host=server01 usage=45.2'
 ```
 
-### POST /api/v1/write/line-protocol
-IEDB原生Line Protocol接口，用请求头而非查询参数。
+### POST /api/v1/write/msgpack
+高性能 MessagePack 二进制写入（推荐）。
 
 **Header：**
 
-+ `Content-Type: text/plain`
 + `Authorization: Bearer TOKEN`
-+ `x-iedb-database: default`- 目标数据库
++ `Content-Type: application/msgpack`
++ `Content-Encoding: gzip`（可选）
++ `x-iedb-database: default`（可选）
 
-### POST /api/v1/write/line-protocol/flush
-强制将缓冲区数据刷新到磁盘。
+**Body (MessagePack):**
 
-### GET /api/v1/write/line-protocol/stats
-行协议接收统计信息。
+```json
+{
+  "m": "measurement_name",
+  "columns": {
+    "time": [1697472000000, 1697472001000],
+    "host": ["server01", "server02"],
+    "value": [45.2, 67.8]
+  }
+}
+```
 
-### GET /api/v1/write/line-protocol/health
-行协议处理程序健康状况。
+**响应：** `204 No Content`
+
+### GET /api/v1/write/msgpack/stats
+MessagePack 接收统计信息。
+
+### GET /api/v1/write/msgpack/spec
+MessagePack 格式规范。
 
 ---
 
