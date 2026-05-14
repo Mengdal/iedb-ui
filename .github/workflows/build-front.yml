@@ -33,9 +33,10 @@ jobs:
 
       - name: Create front.zip
         run: |
-          cd dist
-          zip -r ../front.zip .
-          cd ..
+          mkdir -p front
+          cp -r dist/* front/
+          zip -r front.zip front
+          rm -rf front
 
       - name: Upload front.zip
         uses: actions/upload-artifact@v4
