@@ -27,7 +27,7 @@ const TopNav: React.FC<TopNavProps> = ({ toggleSidebar, pageTitle }) => {
       </div>
 
       <div className="nav-right">
-        <span className="version">v1.6.2</span>
+        <span className="version">{import.meta.env.VITE_APP_VERSION || 'dev'}</span>
         <select
           className="lang-select"
           value={language}
