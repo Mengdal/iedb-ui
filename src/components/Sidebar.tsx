@@ -34,7 +34,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onNavigate, onSh
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     'query-data': true,
     'configure': false,
-    'permission': true,
     'plugins': false,
     'help': true
   });
@@ -46,9 +45,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onNavigate, onSh
   useEffect(() => {
     if (currentView === 'plugins' || currentView === 'plugins-mqtt') {
       setExpandedSections(prev => ({ ...prev, plugins: true }));
-    }
-    if (currentView === 'tokens' || currentView === 'rbac') {
-      setExpandedSections(prev => ({ ...prev, permission: true }));
     }
   }, [currentView]);
 
@@ -80,15 +76,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onNavigate, onSh
       ]
     },
     { id: 'databases', labelKey: 'nav.databases', icon: <Database size={18} />, view: 'databases' },
-    {
-      id: 'permission',
-      labelKey: 'nav.permission',
-      icon: <Key size={18} />,
-      subItems: [
-        { id: 'tokens', labelKey: 'nav.tokens', view: 'tokens' },
-        { id: 'rbac', labelKey: 'nav.rbac', view: 'rbac' }
-      ]
-    },
+    { id: 'permission', labelKey: 'nav.permission', icon: <Key size={18} />, view: 'rbac' },
     {
       id: 'plugins',
       labelKey: 'nav.plugins',

@@ -76,8 +76,10 @@ export const buildChartOption = (type: 'line' | 'bar', result: QueryResponse): C
     series = numericCols.map(s => ({
       name: s.name,
       type,
+      stack: type === 'bar' ? 'total' : undefined,
       smooth: true,
-      showSymbol: false,
+      showSymbol: true,
+      symbolSize: 6,
       emphasis: { focus: 'series' },
       data: result.data!
         .map(row => {
@@ -97,10 +99,15 @@ export const buildChartOption = (type: 'line' | 'bar', result: QueryResponse): C
   return {
     tooltip: {
       trigger: 'axis',
+      confine: true,
       backgroundColor: 'rgba(24, 24, 27, 0.9)',
       borderColor: '#3f3f46',
       textStyle: { color: '#fff', fontSize: 12 },
-      axisPointer: { type: 'cross', label: { backgroundColor: '#6b7280' } }
+      axisPointer: {
+        type: 'cross',
+        label: { backgroundColor: '#6b7280' },
+        snap: true,
+      }
     },
     legend: {
       type: 'scroll',
@@ -118,6 +125,9 @@ export const buildChartOption = (type: 'line' | 'bar', result: QueryResponse): C
         color: '#9ca3af',
         hideOverlap: true,
         fontSize: 10,
+      },
+      axisPointer: {
+        snap: true,
       }
     },
     yAxis: {

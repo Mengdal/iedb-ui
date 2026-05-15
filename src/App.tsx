@@ -12,7 +12,6 @@ import Integrations from './views/Integrations';
 import Databases from './views/Databases';
 import WriteData from './views/WriteData';
 import HelpDoc from './views/HelpDoc';
-import Tokens from './views/Tokens';
 import Rbac from './views/Rbac';
 import Plugins from './views/Plugins';
 import PluginsMqtt from './views/PluginsMqtt';
@@ -25,7 +24,6 @@ export type CurrentView =
   | 'write-data'
   | 'servers'
   | 'databases'
-  | 'tokens'
   | 'rbac'
   | 'plugins'
   | 'plugins-mqtt'
@@ -106,7 +104,6 @@ function App() {
       case 'databases': return <Databases />;
       case 'write-data': return <WriteData />;
       case 'help-doc': return <HelpDoc />;
-      case 'tokens': return <Tokens />;
       case 'rbac': return <Rbac />;
       case 'plugins': return <Plugins />;
       case 'plugins-mqtt': return <PluginsMqtt />;
@@ -157,8 +154,7 @@ function App() {
       case 'write-data': return t('views.writeData.title');
       case 'servers': return t('views.servers.title');
       case 'databases': return t('views.databases.title');
-      case 'tokens': return t('views.tokens.title');
-      case 'rbac': return t('views.rbac.title', { defaultValue: i18n.language.toLowerCase().startsWith('zh') ? 'RBAC 管理' : 'RBAC' });
+      case 'rbac': return t('nav.permission');
       case 'plugins': return t('views.plugins.title');
       case 'plugins-mqtt': return t('views.pluginsMqtt.title');
       case 'dashboards': return t('views.dashboards.title');
