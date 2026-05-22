@@ -1,24 +1,3 @@
-/* ─── Page Layout ─── */
-.rbac-page {
-  padding: 24px 32px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-  height: 100%;
-  flex: 1;
-}
-
-.rbac-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.rbac-header h1 { margin: 0; font-size: 22px; }
-.rbac-header p { margin: 4px 0 0; color: var(--text-secondary); font-size: 13px; }
-
 /* ─── Tabs ─── */
 .rbac-tabs {
   display: flex;
@@ -96,6 +75,20 @@
   align-items: center;
   margin-bottom: 10px;
   flex-shrink: 0;
+}
+
+.tree-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+.section-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: -4px 0 10px;
+  line-height: 1.5;
 }
 
 .rbac-tree-search {
@@ -244,7 +237,7 @@
 .placeholder p { font-size: 14px; margin: 0; }
 
 /* ─── Detail Card ─── */
-.detail-card { display: flex; flex-direction: column; gap: 16px; }
+.detail-card { display: flex; flex-direction: column; gap: 24px; }
 
 .detail-title-row {
   display: flex;
@@ -758,8 +751,6 @@
   padding: 12px 18px;
   border-top: 1px solid var(--border-color);
 }
-
-.confirm-modal { width: 420px; }
 
 /* ─── Forms ─── */
 .inline-form {

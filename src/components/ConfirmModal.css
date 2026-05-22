@@ -1,0 +1,46 @@
+/* Compact style for confirm dialogs */
+.confirm-modal {
+  width: fit-content;
+  min-width: 320px;
+  max-width: 520px;
+}
+
+.confirm-modal .modal-header {
+  padding: 10px 16px;
+}
+
+.confirm-modal .modal-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.confirm-modal .modal-body {
+  padding: 10px 16px 6px;
+  overflow: visible;
+}
+
+.confirm-modal .modal-actions {
+  margin-top: 0;
+  padding: 8px 16px 10px;
+  gap: 8px;
+}
+
+.confirm-modal-danger-icon {
+  color: #ef4444;
+}
+
+.confirm-modal-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.confirm-action-btn {
+  min-width: 96px;
+  justify-content: center;
+}

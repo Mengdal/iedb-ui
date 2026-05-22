@@ -9,13 +9,12 @@ import {
   Copy,
   Ban,
   RotateCcw,
-  Shield,
-  Users,
   AlertTriangle,
   KeyRound,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useServers } from '../contexts/ServerContext';
+import { serverBaseUrl } from '../utils/server';
 import './Tokens.css';
 
 export interface TokenInfo {
@@ -29,26 +28,14 @@ export interface TokenInfo {
   expires_at?: string;
 }
 
-interface TeamRow {
-  id: number;
-  organization_id: number;
-  name: string;
-  description?: string;
-  enabled: boolean;
-}
-
-const OSS_PERM_OPTIONS = ['read', 'write', 'delete', 'admin'] as const;
+const PERM_OPTIONS = ['read', 'write', 'delete', 'admin'] as const;
 
 type PermMode = 'default' | 'custom' | 'rbac';
 
-function serverBaseUrl(protocol: string, host: string) {
-  return `${protocol}${host}`.replace(/\/$/, '');
-}
-
-function formatTs(iso?: string) {
+function formatTs(iso?: string, locale?: string) {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleString(undefined, {
+    return new Date(iso).toLocaleString(locale, {
       dateStyle: 'medium',
       timeStyle: 'short',
     });
@@ -65,7 +52,7 @@ function permModeFromToken(t: TokenInfo): PermMode {
 }
 
 export default function Tokens() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { activeServer } = useServers();
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -77,7 +64,6 @@ export default function Tokens() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [revokeId, setRevokeId] = useState<number | null>(null);
   const [rotateId, setRotateId] = useState<number | null>(null);
-  const [rbacToken, setRbacToken] = useState<TokenInfo | null>(null);
 
   const [secret, setSecret] = useState<{ title: string; value: string } | null>(null);
 
@@ -138,23 +124,23 @@ export default function Tokens() {
   };
 
   return (
-    <div className="tokens-container">
+    <div className="page-container">
       <div className="page-header">
-        <div>
-          <h1 className="page-title-main">{t('views.tokens.pageTitle')}</h1>
-          <p className="page-subtitle">{t('views.tokens.pageSubtitle')}</p>
+        <div className="page-header-text">
+          <h1>{t('views.tokens.pageTitle')}</h1>
+          <p>{t('views.tokens.pageSubtitle')}</p>
         </div>
       </div>
 
-      <div className="tokens-section">
+      <div className="page-section">
         <div className="section-header">
-          <div>
-            <h2 className="section-title-large">{t('views.tokens.sectionTitle')}</h2>
-            <p className="section-desc">{t('views.tokens.sectionDesc')}</p>
+          <div className="section-header-text">
+            <h2>{t('views.tokens.sectionTitle')}</h2>
+            <p>{t('views.tokens.sectionDesc')}</p>
           </div>
-          <div className="tokens-toolbar">
+          <div className="page-toolbar">
             <input
-              className="tokens-search"
+              className="page-search"
               type="search"
               placeholder={t('views.tokens.filterPlaceholder')}
               value={search}
@@ -244,20 +230,11 @@ export default function Tokens() {
                         {item.enabled ? t('views.tokens.active') : t('views.tokens.revoked')}
                       </span>
                     </td>
-                    <td>{formatTs(item.created_at)}</td>
-                    <td>{formatTs(item.last_used_at)}</td>
-                    <td>{formatTs(item.expires_at)}</td>
+                    <td>{formatTs(item.created_at, i18n.language)}</td>
+                    <td>{formatTs(item.last_used_at, i18n.language)}</td>
+                    <td>{formatTs(item.expires_at, i18n.language)}</td>
                     <td>
                       <div className="token-actions">
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-small"
-                          title={t('views.tokens.rbacAndEffectivePermissions')}
-                          onClick={() => setRbacToken(item)}
-                        >
-                          <Shield size={14} />
-                          {t('views.tokens.rbac')}
-                        </button>
                         <button type="button" className="btn btn-ghost btn-small" onClick={() => setEditToken(item)}>
                           <Edit2 size={14} />
                           {t('views.tokens.edit')}
@@ -428,15 +405,6 @@ export default function Tokens() {
           }}
         />
       )}
-
-      {rbacToken && activeServer && authHeaders && (
-        <RbacModal
-          token={rbacToken}
-          baseUrl={serverBaseUrl(activeServer.protocol, activeServer.host)}
-          headers={authHeaders}
-          onClose={() => setRbacToken(null)}
-        />
-      )}
     </div>
   );
 }
@@ -485,7 +453,7 @@ function CreateTokenModal({
       if (permMode === 'rbac') {
         body.permissions = [];
       } else if (permMode === 'custom') {
-        const picked = OSS_PERM_OPTIONS.filter((p) => custom[p]);
+        const picked = PERM_OPTIONS.filter((p) => custom[p]);
         body.permissions = picked;
       }
 
@@ -556,7 +524,7 @@ function CreateTokenModal({
             <div className="form-group">
               <label>{t('views.tokens.scopes')}</label>
               <div className="perm-checkboxes">
-                {OSS_PERM_OPTIONS.map((p) => (
+                {PERM_OPTIONS.map((p) => (
                   <label key={p}>
                     <input
                       type="checkbox"
@@ -634,7 +602,7 @@ function EditTokenModal({
       if (permMode === 'rbac') {
         body.permissions = [];
       } else if (permMode === 'custom') {
-        body.permissions = OSS_PERM_OPTIONS.filter((p) => custom[p]);
+        body.permissions = PERM_OPTIONS.filter((p) => custom[p]);
       } else {
         body.permissions = ['read', 'write'];
       }
@@ -691,7 +659,7 @@ function EditTokenModal({
             <div className="form-group">
               <label>{t('views.tokens.scopes')}</label>
               <div className="perm-checkboxes">
-                {OSS_PERM_OPTIONS.map((p) => (
+                {PERM_OPTIONS.map((p) => (
                   <label key={p}>
                     <input
                       type="checkbox"
@@ -788,180 +756,3 @@ function ConfirmModal({
   );
 }
 
-function RbacModal({
-  token,
-  baseUrl,
-  headers,
-  onClose,
-}: {
-  token: TokenInfo;
-  baseUrl: string;
-  headers: Record<string, string>;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation();
-  const [teams, setTeams] = useState<TeamRow[]>([]);
-  const [effJson, setEffJson] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [rbacErr, setRbacErr] = useState<string | null>(null);
-  const [teamIdInput, setTeamIdInput] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setRbacErr(null);
-    try {
-      const [tRes, pRes] = await Promise.all([
-        fetch(`${baseUrl}/api/v1/auth/tokens/${token.id}/teams`, { headers }),
-        fetch(`${baseUrl}/api/v1/auth/tokens/${token.id}/permissions`, { headers }),
-      ]);
-      const tData = await tRes.json().catch(() => ({}));
-      const pData = await pRes.json().catch(() => ({}));
-
-      if (tRes.status === 503 || tRes.status === 403) {
-        setRbacErr((tData as { error?: string }).error || t('views.tokens.rbacUnavailable'));
-        setTeams([]);
-      } else if (!tRes.ok) {
-        setRbacErr((tData as { error?: string }).error || t('views.tokens.failedToLoadTeams'));
-        setTeams([]);
-      } else if (tData.success && Array.isArray(tData.teams)) {
-        setTeams(tData.teams as TeamRow[]);
-      } else {
-        setTeams([]);
-      }
-
-      if (pRes.ok && (pData as { success?: boolean }).success) {
-        setEffJson(JSON.stringify(pData, null, 2));
-      } else {
-        setEffJson(
-          pRes.status === 503 || pRes.status === 403
-            ? '// Effective permissions require RBAC (same as teams)'
-            : JSON.stringify(pData, null, 2)
-        );
-      }
-    } catch (e) {
-      setRbacErr(e instanceof Error ? e.message : t('views.tokens.failedToLoad'));
-    } finally {
-      setLoading(false);
-    }
-  }, [baseUrl, headers, token.id, t]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const addTeam = async () => {
-    const id = parseInt(teamIdInput, 10);
-    if (!Number.isFinite(id) || id <= 0) return;
-    setBusy(true);
-    try {
-      const res = await fetch(`${baseUrl}/api/v1/auth/tokens/${token.id}/teams`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ team_id: id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setRbacErr((data as { error?: string }).error || t('views.tokens.addFailed'));
-        return;
-      }
-      setTeamIdInput('');
-      load();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const removeTeam = async (teamId: number) => {
-    setBusy(true);
-    try {
-      const res = await fetch(`${baseUrl}/api/v1/auth/tokens/${token.id}/teams/${teamId}`, {
-        method: 'DELETE',
-        headers,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setRbacErr((data as { error?: string }).error || t('views.tokens.removeFailed'));
-        return;
-      }
-      load();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" role="dialog" aria-modal>
-      <div className="modal-content modal-wide">
-        <div className="modal-header">
-          <h3>
-            <Users size={18} style={{ verticalAlign: 'middle', marginRight: 8 }} />
-            {t('views.tokens.rbacTitle', { name: token.name })}
-          </h3>
-          <button type="button" className="icon-btn" onClick={onClose}>
-            <X size={20} />
-          </button>
-        </div>
-        <div className="modal-body">
-          {rbacErr && <div className="tokens-alert">{rbacErr}</div>}
-          {loading ? (
-            <div className="loading-inline">
-              <Loader2 className="spin" size={18} />
-              {t('views.tokens.loading')}
-            </div>
-          ) : (
-            <>
-              <h4 style={{ margin: '0 0 8px', fontSize: 15 }}>{t('views.tokens.teamMemberships')}</h4>
-              {teams.length === 0 && !rbacErr ? (
-                <p className="rbac-hint">{t('views.tokens.noTeams')}</p>
-              ) : (
-                teams.map((tm) => (
-                  <div key={tm.id} className="rbac-team-row">
-                    <div>
-                      <strong>{tm.name}</strong>
-                      <span className="rbac-hint" style={{ marginLeft: 8 }}>
-                        id {tm.id} · org {tm.organization_id}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-small"
-                      disabled={busy}
-                      onClick={() => removeTeam(tm.id)}
-                    >
-                      {t('views.tokens.remove')}
-                    </button>
-                  </div>
-                ))
-              )}
-              <div className="rbac-add-row">
-                <input
-                  type="number"
-                  min={1}
-                  placeholder={t('views.tokens.teamId')}
-                  value={teamIdInput}
-                  onChange={(e) => setTeamIdInput(e.target.value)}
-                />
-                <button type="button" className="btn btn-outlined btn-small" disabled={busy} onClick={addTeam}>
-                  {t('views.tokens.addToTeam')}
-                </button>
-              </div>
-
-              <h4 style={{ margin: '24px 0 8px', fontSize: 15 }}>{t('views.tokens.effectivePermissions')}</h4>
-              <pre className="rbac-json">{effJson}</pre>
-            </>
-          )}
-          <div className="modal-actions" style={{ border: 'none', marginTop: 16, paddingTop: 0 }}>
-            <button type="button" className="btn btn-outlined" onClick={onClose}>
-              {t('common.close')}
-            </button>
-            <button type="button" className="btn btn-primary" onClick={() => load()} disabled={loading}>
-              <RefreshCw size={16} />
-              {t('views.tokens.reload')}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}

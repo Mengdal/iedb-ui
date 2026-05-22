@@ -2,22 +2,24 @@ import React, { useState } from 'react';
 import { Plus, Check, Edit2, Trash2, Eye, EyeOff, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useServers, ServerConnection } from '../contexts/ServerContext';
+import ConfirmModal from '../components/ConfirmModal';
 import './Servers.css';
 
 const Servers: React.FC = () => {
   const { t } = useTranslation();
   const { servers, selectedServerId, addServer, updateServer, deleteServer, selectServer } = useServers();
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  
+  const [deleteTarget, setDeleteTarget] = useState<ServerConnection | null>(null);
+
   const [formData, setFormData] = useState<Omit<ServerConnection, 'id'>>({
     name: '',
     protocol: 'http://',
     host: '',
     token: ''
   });
-  
+
   const [showToken, setShowToken] = useState(false);
 
   const openAddModal = () => {
@@ -48,19 +50,19 @@ const Servers: React.FC = () => {
   };
 
   return (
-    <div className="servers-container">
+    <div className="page-container">
       <div className="page-header">
-        <div>
-          <h1 className="page-title-main">{t('views.servers.title')}</h1>
-          <p className="page-subtitle">{t('views.servers.subtitle')}</p>
+        <div className="page-header-text">
+          <h1>{t('views.servers.title')}</h1>
+          <p>{t('views.servers.subtitle')}</p>
         </div>
       </div>
 
-      <div className="servers-section">
+      <div className="page-section">
         <div className="section-header">
-          <div>
-            <h2 className="section-title-large">{t('views.servers.sectionTitle')}</h2>
-            <p className="section-desc">{t('views.servers.sectionDesc')}</p>
+          <div className="section-header-text">
+            <h2>{t('views.servers.sectionTitle')}</h2>
+            <p>{t('views.servers.sectionDesc')}</p>
           </div>
           <button className="btn btn-primary" onClick={openAddModal}>
             <Plus size={16} /> {t('views.servers.addServer')}
@@ -81,9 +83,9 @@ const Servers: React.FC = () => {
                     {server.protocol}{server.host}
                   </div>
                 </div>
-                
+
                 <div className="server-actions">
-                  <button 
+                  <button
                     className={`btn ${isSelected ? 'btn-filled-dark' : 'btn-outlined'}`}
                     onClick={() => selectServer(server.id)}
                   >
@@ -92,7 +94,7 @@ const Servers: React.FC = () => {
                   <button className="icon-btn-bordered" onClick={() => openEditModal(server)}>
                     <Edit2 size={16} />
                   </button>
-                  <button className="icon-btn-bordered btn-danger" onClick={() => deleteServer(server.id)}>
+                  <button className="icon-btn-bordered btn-danger" onClick={() => setDeleteTarget(server)}>
                     <Trash2 size={16} />
                   </button>
                 </div>
@@ -103,21 +105,21 @@ const Servers: React.FC = () => {
       </div>
 
       {isModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
+        <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{editingId ? t('views.servers.modalEditTitle') : t('views.servers.modalAddTitle')}</h3>
               <button className="icon-btn" onClick={() => setIsModalOpen(false)}>
                 <X size={20} />
               </button>
             </div>
-            
+
             <form onSubmit={handleSubmit} className="server-form">
               <div className="form-group">
                 <label>{t('views.servers.serverName')}</label>
-                <input 
-                  type="text" 
-                  required 
+                <input
+                  type="text"
+                  required
                   placeholder={t('views.servers.serverNamePlaceholder')}
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
@@ -127,20 +129,19 @@ const Servers: React.FC = () => {
               <div className="form-group">
                 <label>{t('views.servers.serverUrl')}</label>
                 <div className="url-input-group">
-                  <select 
+                  <select
                     value={formData.protocol}
                     onChange={e => setFormData({ ...formData, protocol: e.target.value as 'http://' | 'https://' })}
                   >
                     <option value="http://">http://</option>
                     <option value="https://">https://</option>
                   </select>
-                  <input 
-                    type="text" 
-                    required 
+                  <input
+                    type="text"
+                    required
                     placeholder={t('views.servers.hostPlaceholder')}
                     value={formData.host}
                     onChange={e => {
-                      // 自动去掉用户误粘贴的 http:// 或 https://
                       let val = e.target.value;
                       val = val.replace(/^https?:\/\//i, '');
                       setFormData({ ...formData, host: val });
@@ -152,9 +153,9 @@ const Servers: React.FC = () => {
               <div className="form-group">
                 <label>{t('views.servers.token')}</label>
                 <div className="token-input-group">
-                  <input 
-                    type={showToken ? "text" : "password"} 
-                    required 
+                  <input
+                    type={showToken ? "text" : "password"}
+                    required
                     placeholder={t('views.servers.tokenPlaceholder')}
                     value={formData.token}
                     onChange={e => setFormData({ ...formData, token: e.target.value })}
@@ -176,6 +177,20 @@ const Servers: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {deleteTarget && (
+        <ConfirmModal
+          title={t('views.servers.delete')}
+          description={t('views.servers.deleteConfirm', { name: deleteTarget.name })}
+          confirmLabel={t('common.confirmDelete')}
+          danger
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            deleteServer(deleteTarget.id);
+            setDeleteTarget(null);
+          }}
+        />
       )}
     </div>
   );

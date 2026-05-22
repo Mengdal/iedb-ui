@@ -1,7 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Database, Plus, RefreshCw, Trash2, Search, X, AlertTriangle, Activity, Server, Loader2 } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Database, Plus, RefreshCw, Trash2, X, Server, Loader2, ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useServers } from '../contexts/ServerContext';
+import { serverBaseUrl } from '../utils/server';
+import ConfirmModal from '../components/ConfirmModal';
+import DatabaseRetentionPolicies from './DatabaseRetentionPolicies';
+import DatabaseMeasurements from './DatabaseMeasurements';
 import './Databases.css';
 
 interface DatabaseItem {
@@ -9,41 +13,56 @@ interface DatabaseItem {
   measurement_count: number;
 }
 
-export default function Databases() {
+function Databases() {
   const { t } = useTranslation();
   const { activeServer } = useServers();
+
   const [databases, setDatabases] = useState<DatabaseItem[]>([]);
+  const [policyCountMap, setPolicyCountMap] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Create Modal State
+  // Create modal
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newDbName, setNewDbName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  // Delete Modal State
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [dbToDelete, setDbToDelete] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  // Delete confirmation
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  // Detail view
+  const [selectedDb, setSelectedDb] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'retention' | 'measurements'>('retention');
+  const [dbMeasurements, setDbMeasurements] = useState<string[]>([]);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const baseUrl = useMemo(() => {
+    if (!activeServer) return '';
+    return serverBaseUrl(activeServer.protocol, activeServer.host);
+  }, [activeServer]);
 
   const fetchDatabases = async () => {
     if (!activeServer) return;
     setIsLoading(true);
     try {
-      const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, '');
-      const res = await fetch(`${baseUrl}/api/v1/databases`, {
-        headers: {
-          'Authorization': `Bearer ${activeServer.token}`
-        }
-      });
-      const data = await res.json();
-      if (data && data.databases) {
-        setDatabases(data.databases);
-      } else {
-        setDatabases([]);
+      const headers = { 'Authorization': `Bearer ${activeServer.token}` };
+      const [dbRes, rpRes] = await Promise.all([
+        fetch(`${baseUrl}/api/v1/databases`, { headers }),
+        fetch(`${baseUrl}/api/v1/retention`, { headers }),
+      ]);
+      if (!dbRes.ok) throw new Error(`Failed: ${dbRes.status}`);
+      const dbData = await dbRes.json();
+      setDatabases(dbData.databases || []);
+
+      if (rpRes.ok) {
+        const rpData = await rpRes.json();
+        const policies = Array.isArray(rpData) ? rpData : [];
+        const map: Record<string, number> = {};
+        policies.forEach((p: any) => { map[p.database] = (map[p.database] || 0) + 1; });
+        setPolicyCountMap(map);
       }
-    } catch (err) {
-      console.error('Failed to fetch databases:', err);
+    } catch {
+      // handled by UI state
     } finally {
       setIsLoading(false);
     }
@@ -53,116 +72,143 @@ export default function Databases() {
     fetchDatabases();
   }, [activeServer]);
 
-  const handleCreateDatabase = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeServer || !newDbName.trim()) return;
+  // Fetch measurements when entering detail view
+  useEffect(() => {
+    if (!selectedDb || !activeServer) { setDbMeasurements([]); return; }
+    const ctrl = new AbortController();
+    fetch(`${baseUrl}/api/v1/databases/${encodeURIComponent(selectedDb)}/measurements`, {
+      headers: { 'Authorization': `Bearer ${activeServer.token}` },
+      signal: ctrl.signal,
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(`Failed: ${res.status}`);
+        return res.json();
+      })
+      .then(data => setDbMeasurements((data.measurements || []).map((m: any) => m.name)))
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [selectedDb, activeServer]);
 
+  const handleCreateDatabase = async () => {
+    if (!activeServer || !newDbName.trim()) return;
     setIsCreating(true);
+    setErrorMsg('');
     try {
-      const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, '');
       const res = await fetch(`${baseUrl}/api/v1/databases`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${activeServer.token}`,
-          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ name: newDbName.trim() })
+        body: JSON.stringify({ name: newDbName.trim() }),
       });
-
-      const text = await res.text();
-      let isSuccess = false;
-      try {
-        const data = JSON.parse(text);
-        if (data.success || res.ok) {
-          isSuccess = true;
-        }
-      } catch {
-        if (res.ok) isSuccess = true;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErrorMsg(data.error || t('views.databases.createFailed'));
+        return;
       }
-
-      if (isSuccess || res.ok) {
-        setNewDbName('');
-        setShowCreateModal(false);
-        fetchDatabases();
-      } else {
-        alert(t('views.databases.createFailed'));
-      }
-    } catch (err) {
-      console.error('Failed to create database:', err);
-      alert(t('views.databases.createError'));
+      setShowCreateModal(false);
+      setNewDbName('');
+      fetchDatabases();
+    } catch {
+      setErrorMsg(t('views.databases.createFailed'));
     } finally {
       setIsCreating(false);
     }
   };
 
   const handleDeleteDatabase = async () => {
-    if (!activeServer || !dbToDelete) return;
-
-    setIsDeleting(true);
-    try {
-      const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, '');
-      const res = await fetch(`${baseUrl}/api/v1/databases/${encodeURIComponent(dbToDelete)}?confirm=true`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${activeServer.token}`
-        }
-      });
-
-      if (res.ok) {
-        setShowDeleteModal(false);
-        setDbToDelete(null);
-        fetchDatabases();
-      } else {
-        const errText = await res.text();
-        alert(t('views.databases.deleteFailedWithReason', { reason: errText }));
-      }
-    } catch (err: any) {
-      console.error('Failed to delete database:', err);
-      alert(t('views.databases.deleteErrorWithReason', { reason: err.message }));
-    } finally {
-      setIsDeleting(false);
+    if (!activeServer || !deleteTarget) return;
+    setErrorMsg('');
+    const res = await fetch(`${baseUrl}/api/v1/databases/${encodeURIComponent(deleteTarget)}?confirm=true`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${activeServer.token}` },
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || t('views.databases.deleteFailed'));
     }
+    setDeleteTarget(null);
+    fetchDatabases();
   };
 
+  const filteredDatabases = useMemo(() =>
+    databases.filter(db => db.name.toLowerCase().includes(searchQuery.toLowerCase())),
+    [databases, searchQuery]
+  );
+
+  // No server selected
   if (!activeServer) {
     return (
-      <div className="databases-container" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div className="empty-state">
-          <Server size={48} className="empty-state-icon" />
-          <h3>{t('views.databases.noServerTitle')}</h3>
-          <p>{t('views.databases.noServerHint')}</p>
+      <div className="databases-page">
+        <div className="db-empty-state">
+          <Server size={48} color="var(--text-muted)" />
+          <h3>{t('views.databases.noServer')}</h3>
+          <p>{t('views.databases.noServerDesc')}</p>
         </div>
       </div>
     );
   }
 
-  const filteredDatabases = databases.filter((db) =>
-    db.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Detail view
+  if (selectedDb) {
+    return (
+      <div className="databases-page">
+        <div className="db-detail-header">
+          <div className="db-breadcrumb">
+            <button className="db-back-btn" onClick={() => setSelectedDb(null)}>
+              <Database size={16} />
+              {t('views.databases.title')}
+            </button>
+            <ChevronRight size={16} className="db-breadcrumb-sep" />
+            <span className="db-breadcrumb-current">{selectedDb}</span>
+          </div>
+          <div className="db-tabs">
+            <button
+              className={`db-tab-btn ${activeTab === 'retention' ? 'active' : ''}`}
+              onClick={() => setActiveTab('retention')}
+            >
+              {t('views.databases.detail.tabRetention')}
+            </button>
+            <button
+              className={`db-tab-btn ${activeTab === 'measurements' ? 'active' : ''}`}
+              onClick={() => setActiveTab('measurements')}
+            >
+              {t('views.databases.detail.tabMeasurements')}
+            </button>
+          </div>
+        </div>
 
+        {activeTab === 'retention' ? (
+          <DatabaseRetentionPolicies database={selectedDb} measurements={dbMeasurements} />
+        ) : (
+          <DatabaseMeasurements database={selectedDb} />
+        )}
+      </div>
+    );
+  }
+
+  // Database list
   return (
-    <div className="databases-container">
-      <div className="databases-header">
-        <h2>
-          <Database size={24} className="text-primary" />
-          {t('views.databases.title')}
-        </h2>
-        <div className="databases-actions">
-          <div className="search-bar" style={{ position: 'relative' }}>
-            <Search size={16} style={{ position: 'absolute', left: 12, top: 10, color: 'var(--text-secondary)' }} />
+    <div className="databases-page">
+      {/* Header */}
+      <div className="db-header">
+        <div className="db-header-left">
+          <div className="db-title-row">
+            <div>
+              <h1 className="db-title">{t('views.databases.title')}</h1>
+              <p className="db-subtitle">{t('views.databases.subtitle')}</p>
+            </div>
+          </div>
+        </div>
+        <div className="db-header-right">
+          <div className="db-search-container">
             <input
               type="text"
+              className="db-search-input"
               placeholder={t('views.databases.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                background: 'var(--surface-dark)',
-                border: '1px solid var(--border-light)',
-                borderRadius: '8px',
-                padding: '8px 12px 8px 36px',
-                color: 'var(--text-primary)',
-                width: '240px'
-              }}
             />
           </div>
           <button
@@ -171,173 +217,125 @@ export default function Databases() {
             disabled={isLoading}
           >
             <RefreshCw size={16} className={isLoading ? 'spin' : ''} />
-            {t('common.refresh')}
+            {t('views.databases.refresh')}
           </button>
           <button
             className="btn btn-primary"
             onClick={() => setShowCreateModal(true)}
           >
             <Plus size={16} />
-            {t('views.databases.createDatabase')}
+            {t('views.databases.create')}
           </button>
         </div>
       </div>
 
-      {isLoading && databases.length === 0 ? (
-        <div className="empty-state" style={{ minHeight: '300px' }}>
-          <Loader2 size={32} className="spin text-primary" style={{ marginBottom: 16 }} />
-          <p>{t('views.databases.loadingDatabases')}</p>
+      {/* Content */}
+      {errorMsg && <div className="tokens-alert">{errorMsg}</div>}
+
+      {isLoading ? (
+        <div className="db-loading">
+          <Loader2 size={32} className="spin" />
+          <p>{t('views.databases.loading')}</p>
+        </div>
+      ) : filteredDatabases.length === 0 ? (
+        <div className="db-empty-state">
+          <Database size={48} color="var(--text-muted)" />
+          <h3>{searchQuery ? t('views.databases.noMatch') : t('views.databases.noDatabases')}</h3>
+          <p>{searchQuery ? t('views.databases.tryDifferentSearch') : t('views.databases.createFirst')}</p>
         </div>
       ) : (
-        <div className="databases-grid">
-          {filteredDatabases.length === 0 ? (
-            <div className="empty-state">
-              <Database size={48} className="empty-state-icon" />
-              <h3>{t('views.databases.noDatabasesFound')}</h3>
-              <p>{searchQuery ? t('views.databases.adjustSearchHint') : t('views.databases.createToStartHint')}</p>
-            </div>
-          ) : (
-            filteredDatabases.map((db) => (
-              <div key={db.name} className="database-card">
-                <div className="db-card-header">
-                  <div className="db-card-title">
-                    <div className="db-icon-container">
-                      <Database size={20} />
-                    </div>
-                    <div>
-                      <h3 className="db-name">{db.name}</h3>
-                      <div className="db-meta">
-                        <Activity size={14} /> {t('views.databases.activeDatabase')}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="db-card-actions">
-                    <button
-                      className="icon-btn danger"
-                      onClick={() => {
-                        setDbToDelete(db.name);
-                        setShowDeleteModal(true);
-                      }}
-                      title={t('views.databases.deleteDatabase')}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+        <div className="db-grid">
+          {filteredDatabases.map((db) => (
+            <div
+              key={db.name}
+              className="database-card"
+              onClick={() => { setSelectedDb(db.name); setActiveTab('retention'); }}
+            >
+              <div className="db-card-header">
+                <div className="db-card-icon-container">
+                  <Database size={20} color="#3b82f6" />
                 </div>
-
-                <div className="db-stats">
-                  <div className="stat-item">
-                    <span className="stat-label">{t('views.databases.measurements')}</span>
-                    <span className="stat-value">{db.measurement_count ?? 0}</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-label">{t('views.databases.status')}</span>
-                    <span className="stat-value" style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span> {t('views.databases.online')}
-                    </span>
-                  </div>
+                <div className="db-card-info">
+                  <h3 className="db-card-name">{db.name}</h3>
                 </div>
-
+                <button
+                  className="btn btn-icon btn-danger-ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteTarget(db.name);
+                  }}
+                  title={t('views.databases.delete')}
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
-            ))
-          )}
+              <div className="db-card-stats">
+                <div className="db-stat-item">
+                  <span className="db-stat-label">{t('views.databases.measurements')}</span>
+                  <span className="db-stat-value">{db.measurement_count ?? 0}</span>
+                </div>
+                <div className="db-stat-item">
+                  <span className="db-stat-label">{t('views.databases.retentionPolicies')}</span>
+                  <span className="db-stat-value">{policyCountMap[db.name] ?? 0}</span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Create Database Modal */}
+      {/* Create Modal */}
       {showCreateModal && (
         <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{t('views.databases.createDatabase')}</h3>
-              <button className="close-btn" onClick={() => setShowCreateModal(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <form onSubmit={handleCreateDatabase}>
-              <div className="modal-body create-db-modal-body">
-                <div className="form-group">
-                  <label htmlFor="dbName">{t('views.databases.databaseName')}</label>
-                  <input
-                    id="dbName"
-                    type="text"
-                    className="form-input"
-                    placeholder={t('views.databases.databaseNamePlaceholder')}
-                    value={newDbName}
-                    onChange={(e) => setNewDbName(e.target.value)}
-                    autoFocus
-                    required
-                  />
-                  <span className="create-db-hint">
-                    {t('views.databases.databaseNameHint')}
-                  </span>
-                </div>
-              </div>
-              <div className="modal-footer create-db-modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowCreateModal(false)}
-                >
-                  {t('common.cancel')}
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={isCreating || !newDbName.trim()}
-                >
-                  {isCreating ? <Loader2 size={16} className="spin" /> : <Database size={16} />}
-                  {t('views.databases.create')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Database Modal */}
-      {showDeleteModal && (
-        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444' }}>
-                <AlertTriangle size={20} />
-                {t('views.databases.deleteDatabase')}
-              </h3>
-              <button className="close-btn" onClick={() => setShowDeleteModal(false)}>
+              <h2>{t('views.databases.createTitle')}</h2>
+              <button className="btn btn-icon" onClick={() => setShowCreateModal(false)}>
                 <X size={20} />
               </button>
             </div>
             <div className="modal-body">
-              <p style={{ color: 'var(--text-primary)', marginBottom: '16px', lineHeight: '1.5' }}>
-                {t('views.databases.confirmDeleteMessage', { name: dbToDelete })}
-              </p>
-              <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '12px', borderRadius: '8px', color: '#ef4444', fontSize: '13px', display: 'flex', gap: '12px' }}>
-                <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
-                <span>
-                  {t('views.databases.deleteWarning')}
-                </span>
+              <div className="form-group">
+                <label>{t('views.databases.dbName')}</label>
+                <input
+                  type="text"
+                  value={newDbName}
+                  onChange={(e) => setNewDbName(e.target.value)}
+                  placeholder={t('views.databases.dbNamePlaceholder')}
+                  autoFocus
+                />
+                <p className="form-hint">{t('views.databases.dbNameHint')}</p>
               </div>
             </div>
-            <div className="modal-footer">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowDeleteModal(false)}
-              >
-                {t('common.cancel')}
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
+                {t('views.databases.cancel')}
               </button>
               <button
-                className="btn btn-danger"
-                onClick={handleDeleteDatabase}
-                disabled={isDeleting}
+                className="btn btn-primary"
+                onClick={handleCreateDatabase}
+                disabled={!newDbName.trim() || isCreating}
               >
-                {isDeleting ? <Loader2 size={16} className="spin" /> : <Trash2 size={16} />}
-                {t('views.databases.confirmDelete')}
+                {isCreating ? <Loader2 size={16} className="spin" /> : <Plus size={16} />}
+                {t('views.databases.create')}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {deleteTarget && (
+        <ConfirmModal
+          title={t('views.databases.deleteTitle')}
+          description={t('views.databases.deleteConfirm', { name: deleteTarget })}
+          confirmLabel={t('views.databases.delete')}
+          danger
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={handleDeleteDatabase}
+        />
+      )}
     </div>
   );
 }
+
+export default Databases;

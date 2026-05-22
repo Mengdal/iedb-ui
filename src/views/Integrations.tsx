@@ -124,11 +124,11 @@ const Integrations: React.FC = () => {
   };
 
   return (
-    <div className="integrations-container">
-      <div className="section-header">
-        <div>
-          <h2 className="section-title-large">{t('views.integrations.title')}</h2>
-          <p className="section-desc">{t('views.integrations.subtitle')}</p>
+    <div className="page-container">
+      <div className="page-header">
+        <div className="page-header-text">
+          <h1>{t('views.integrations.title')}</h1>
+          <p>{t('views.integrations.subtitle')}</p>
         </div>
       </div>
 

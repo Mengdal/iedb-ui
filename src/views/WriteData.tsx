@@ -439,7 +439,7 @@ const WriteData: React.FC = () => {
 
   if (!activeServer) {
     return (
-      <div className="write-data-container write-data-empty">
+      <div className="page-container write-data-empty">
         <h2>{t('views.writeData.noServerTitle')}</h2>
         <p>{t('views.writeData.noServerHint')}</p>
       </div>
@@ -447,9 +447,9 @@ const WriteData: React.FC = () => {
   }
 
   return (
-    <div className="write-data-container">
-      <div className="write-data-header">
-        <div>
+    <div className="page-container">
+      <div className="page-header">
+        <div className="page-header-text">
           <h1>{t('views.writeData.title')}</h1>
           <p>{t('views.writeData.subtitle')}</p>
         </div>

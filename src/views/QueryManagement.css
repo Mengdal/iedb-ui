@@ -1,0 +1,200 @@
+/* ─── Query Management Page ─── */
+
+/* Tab switcher */
+.qm-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 16px;
+}
+
+.qm-tab-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 8px 16px;
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+}
+
+.qm-tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.qm-tab-btn.active {
+  color: var(--accent-primary);
+  font-weight: 500;
+}
+
+.qm-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent-primary);
+  border-radius: 1px 1px 0 0;
+}
+
+/* Active table columns */
+.qm-col-id { width: 10%; }
+.qm-col-sql { width: 30%; }
+.qm-col-token { width: 12%; }
+.qm-col-ip { width: 12%; }
+.qm-col-duration { width: 10%; }
+.qm-col-parallel { width: 8%; }
+.qm-col-partitions { width: 8%; }
+.qm-col-actions { width: 10%; }
+
+/* History table columns */
+.qm-col-h-id { width: 10%; }
+.qm-col-h-sql { width: 32%; }
+.qm-col-h-token { width: 12%; }
+.qm-col-h-status { width: 10%; }
+.qm-col-h-duration { width: 12%; }
+.qm-col-h-time { width: 16%; }
+.qm-col-h-ip { width: 8%; }
+
+/* SQL cell */
+.qm-sql-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  cursor: default;
+}
+
+.qm-sql-cell:hover {
+  white-space: normal;
+  overflow: visible;
+  position: relative;
+  z-index: 2;
+  background: var(--bg-surface);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  padding: 7px 10px;
+}
+
+/* Status badge */
+.qm-status-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.qm-status-badge.running {
+  background: rgba(34, 174, 255, 0.12);
+  color: var(--accent-primary);
+}
+
+.qm-status-badge.completed {
+  background: rgba(34, 174, 255, 0.1);
+  color: var(--accent-primary);
+}
+
+.qm-status-badge.failed,
+.qm-status-badge.cancelled,
+.qm-status-badge.timed_out {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+/* Cancel button */
+.qm-cancel-btn {
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.qm-cancel-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.qm-cancel-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Governance Tab ─── */
+
+.qm-gov-limit-val {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.qm-gov-limit-val.unlimited {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.qm-gov-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.qm-gov-actions .icon-btn.danger:hover {
+  color: #ef4444;
+}
+
+/* Policy form modal */
+.qm-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+
+.qm-form-grid .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.qm-form-grid .form-group label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.qm-form-grid .form-group input,
+.qm-form-grid .form-group select {
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.qm-form-grid .form-group input:focus,
+.qm-form-grid .form-group select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.qm-form-grid .form-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* Policy table columns */
+.qm-col-g-token { width: 14%; }
+.qm-col-g-rmin { width: 12%; }
+.qm-col-g-rhour { width: 12%; }
+.qm-col-g-qhour { width: 12%; }
+.qm-col-g-qday { width: 12%; }
+.qm-col-g-rows { width: 14%; }
+.qm-col-g-scan { width: 14%; }
+.qm-col-g-actions { width: 10%; }
+

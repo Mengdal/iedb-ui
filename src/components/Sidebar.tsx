@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { 
-  Activity, Settings, Database, Key, LayoutGrid, 
+import {
+  Activity, Settings, Database, Key, LayoutGrid,
   Upload, TerminalSquare, LayoutDashboard, HelpCircle,
   ChevronDown, ChevronRight
 } from 'lucide-react';
@@ -34,6 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onNavigate, onSh
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     'query-data': true,
     'configure': false,
+    'permission': false,
     'plugins': false,
     'help': true
   });
@@ -45,6 +46,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onNavigate, onSh
   useEffect(() => {
     if (currentView === 'plugins' || currentView === 'plugins-mqtt') {
       setExpandedSections(prev => ({ ...prev, plugins: true }));
+    }
+    if (currentView === 'rbac' || currentView === 'tokens' || currentView === 'audit-log') {
+      setExpandedSections(prev => ({ ...prev, permission: true }));
+    }
+    if (currentView === 'data-explorer' || currentView === 'query-mgmt') {
+      setExpandedSections(prev => ({ ...prev, 'query-data': true }));
     }
   }, [currentView]);
 
@@ -76,7 +83,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onNavigate, onSh
       ]
     },
     { id: 'databases', labelKey: 'nav.databases', icon: <Database size={18} />, view: 'databases' },
-    { id: 'permission', labelKey: 'nav.permission', icon: <Key size={18} />, view: 'rbac' },
+    {
+      id: 'permission',
+      labelKey: 'nav.permission',
+      icon: <Key size={18} />,
+      subItems: [
+        { id: 'tokens', labelKey: 'nav.tokens', view: 'tokens' },
+        { id: 'rbac', labelKey: 'nav.rbac', view: 'rbac' },
+        { id: 'audit-log', labelKey: 'nav.auditLog', view: 'audit-log' },
+      ]
+    },
     {
       id: 'plugins',
       labelKey: 'nav.plugins',
@@ -92,7 +108,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onNavigate, onSh
       labelKey: 'nav.queryData',
       icon: <TerminalSquare size={18} />,
       subItems: [
-        { id: 'data-explorer', labelKey: 'nav.dataExplorer', view: 'data-explorer' }
+        { id: 'data-explorer', labelKey: 'nav.dataExplorer', view: 'data-explorer' },
+        { id: 'query-mgmt', labelKey: 'nav.queryManagement', view: 'query-mgmt' },
       ]
     },
     { id: 'dashboards', labelKey: 'nav.dashboards', icon: <LayoutDashboard size={18} />, view: 'dashboards' },

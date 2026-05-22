@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { History, Plus, RefreshCw, Play, Pencil, Trash2, X, AlertTriangle, Loader2 } from 'lucide-react';
+import { History, Plus, RefreshCw, Play, Pencil, Trash2, X, AlertTriangle, Loader2, ShieldAlert } from 'lucide-react';
 import { useServers } from '../contexts/ServerContext';
 import { useTranslation } from 'react-i18next';
+import ConfirmModal from '../components/ConfirmModal';
 import './Tokens.css';
 import './Plugins.css';
 
@@ -72,11 +73,12 @@ GROUP BY time`;
 
 const Plugins: React.FC = () => {
   const { activeServer } = useServers();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const [cqs, setCqs] = useState<ContinuousQuery[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [featureNotEnabled, setFeatureNotEnabled] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [databaseFilter, setDatabaseFilter] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'true' | 'false'>('all');
@@ -90,6 +92,7 @@ const Plugins: React.FC = () => {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [availableDatabases, setAvailableDatabases] = useState<string[]>([]);
   const [availableMeasurements, setAvailableMeasurements] = useState<string[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<ContinuousQuery | null>(null);
   const [isLoadingDatabases, setIsLoadingDatabases] = useState(false);
   const [isLoadingMeasurements, setIsLoadingMeasurements] = useState(false);
 
@@ -125,6 +128,10 @@ const Plugins: React.FC = () => {
         ...(init?.headers || {})
       }
     });
+    if (res.status === 404) {
+      setFeatureNotEnabled(true);
+      return null;
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new Error(data?.error || `Request failed: ${res.status}`);
@@ -144,13 +151,16 @@ const Plugins: React.FC = () => {
     }
     setIsLoading(true);
     setErrorMsg('');
+    setFeatureNotEnabled(false);
     try {
       const params = new URLSearchParams();
       if (databaseFilter) params.set('database', databaseFilter);
       if (activeFilter !== 'all') params.set('is_active', activeFilter);
       const query = params.toString();
       const data = await cqApiFetch(`/api/v1/continuous_queries${query ? `?${query}` : ''}`);
-      setCqs(Array.isArray(data) ? data : []);
+      if (data) {
+        setCqs(Array.isArray(data) ? data : []);
+      }
     } catch (err: any) {
       setErrorMsg(err.message || t('views.plugins.failedToLoad'));
     } finally {
@@ -326,7 +336,6 @@ const Plugins: React.FC = () => {
   };
 
   const deleteCQ = async (cq: ContinuousQuery) => {
-    if (!window.confirm(t('views.plugins.deleteConfirm', { name: cq.name }))) return;
     try {
       await cqApiFetch(`/api/v1/continuous_queries/${cq.id}`, { method: 'DELETE' });
       fetchCQs();
@@ -400,34 +409,30 @@ const Plugins: React.FC = () => {
   };
 
   return (
-    <div className="tokens-container plugins-cq-page">
+    <div className="page-container plugins-cq-page">
       <div className="page-header">
-        <div>
-          <h1 className="page-title-main">{t('views.plugins.title')}</h1>
-          <p className="page-subtitle">
-            {t('views.plugins.pageSubtitle')}
-          </p>
+        <div className="page-header-text">
+          <h1>{t('views.plugins.title')}</h1>
+          <p>{t('views.plugins.pageSubtitle')}</p>
         </div>
       </div>
 
-      <div className="tokens-section">
+      <div className="page-section">
         <div className="section-header">
-          <div className="cq-section-left">
-            <h2 className="section-title-large">{t('views.plugins.sectionTitle')}</h2>
-            <p className="section-desc cq-desc">
-              {t('views.plugins.sectionDesc')}
-            </p>
+          <div className="section-header-text cq-section-left">
+            <h2>{t('views.plugins.sectionTitle')}</h2>
+            <p className="cq-desc">{t('views.plugins.sectionDesc')}</p>
           </div>
-          <div className="tokens-toolbar cq-toolbar">
+          <div className="page-toolbar cq-toolbar">
             <input
-              className="tokens-search"
+              className="page-search"
               type="search"
               value={databaseFilter}
               onChange={(e) => setDatabaseFilter(e.target.value)}
               placeholder={t('views.plugins.filterPlaceholder')}
             />
             <select
-              className="tokens-search cq-toolbar-select"
+              className="page-search cq-toolbar-select"
               value={activeFilter}
               onChange={(e) => setActiveFilter(e.target.value as 'all' | 'true' | 'false')}
             >
@@ -456,18 +461,25 @@ const Plugins: React.FC = () => {
         {activeServer && errorMsg && <div className="tokens-alert">{errorMsg}</div>}
         {activeServer && successMsg && <div className="tokens-alert cq-success-alert">{successMsg}</div>}
 
-        {activeServer && isLoading && cqs.length === 0 && !errorMsg && (
+        {activeServer && featureNotEnabled && (
+          <div className="audit-no-license">
+            <ShieldAlert size={40} />
+            <p>{t('views.plugins.featureNotEnabled')}</p>
+          </div>
+        )}
+
+        {activeServer && !featureNotEnabled && isLoading && cqs.length === 0 && !errorMsg && (
           <div className="loading-inline">
             <Loader2 className="spin" size={18} />
             {t('views.plugins.loadingCqs')}
           </div>
         )}
 
-        {activeServer && !isLoading && !errorMsg && cqs.length === 0 && (
+        {activeServer && !featureNotEnabled && !isLoading && !errorMsg && cqs.length === 0 && (
           <div className="tokens-empty">{t('views.plugins.noCQsYet')}</div>
         )}
 
-        {activeServer && cqs.length > 0 && (
+        {activeServer && !featureNotEnabled && cqs.length > 0 && (
           <div className="tokens-table-wrap">
             <table className="tokens-table">
               <colgroup>
@@ -520,7 +532,7 @@ const Plugins: React.FC = () => {
                         </span>
                       </button>
                     </td>
-                    <td>{cq.last_execution_time ? new Date(cq.last_execution_time).toLocaleString() : '—'}</td>
+                    <td>{cq.last_execution_time ? new Date(cq.last_execution_time).toLocaleString(i18n.language) : '—'}</td>
                     <td>
                       <div className="token-actions">
                         <button type="button" className="icon-btn" title={t('views.plugins.actionRun')} onClick={() => executeCQ(cq, false)} disabled={isExecutingId === cq.id || !cq.is_active}>
@@ -532,7 +544,7 @@ const Plugins: React.FC = () => {
                         <button type="button" className="icon-btn" title={t('views.plugins.actionEdit')} onClick={() => openEdit(cq)}>
                           <Pencil size={16} />
                         </button>
-                        <button type="button" className="icon-btn danger" title={t('views.plugins.actionDelete')} onClick={() => deleteCQ(cq)}>
+                        <button type="button" className="icon-btn danger" title={t('views.plugins.actionDelete')} onClick={() => setDeleteTarget(cq)}>
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -702,7 +714,7 @@ const Plugins: React.FC = () => {
                 <div key={item.id} className="cq-history-item">
                   <div className="cq-history-top">
                     <span className={`perm-badge${item.status === 'completed' ? '' : ' muted'}`}>{item.status}</span>
-                    <span>{new Date(item.execution_time).toLocaleString()}</span>
+                    <span>{new Date(item.execution_time).toLocaleString(i18n.language)}</span>
                   </div>
                   <div className="cq-history-meta">
                     <span>{t('views.plugins.writtenRecords', { count: item.records_written ?? 0 })}</span>
@@ -715,6 +727,20 @@ const Plugins: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {deleteTarget && (
+        <ConfirmModal
+          title={t('views.plugins.delete')}
+          description={t('views.plugins.deleteConfirm', { name: deleteTarget.name })}
+          confirmLabel={t('common.confirmDelete')}
+          danger
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            deleteCQ(deleteTarget);
+            setDeleteTarget(null);
+          }}
+        />
       )}
     </div>
   );

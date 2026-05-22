@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useServers } from '../contexts/ServerContext';
 import type { CurrentView } from '../App';
 import { buildChartOption, downloadFile, isChartError } from '../utils/chartUtils';
+import { serverBaseUrl } from '../utils/server';
 import './DataExplorer.css';
 
 interface DatabaseItem {
@@ -738,14 +739,14 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
     setIsGeneratingSql(true);
 
     try {
-      const serverBaseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, "");
+      const baseUrl = serverBaseUrl(activeServer.protocol, activeServer.host);
 
       // 1. Get or Build Schema Snapshot
       let schemaSnapshot = schemaCacheRef.current[selectedDb];
 
       if (!schemaSnapshot) {
         // Fetch all measurements
-        const measurementsRes = await fetch(`${serverBaseUrl}/api/v1/databases/${encodeURIComponent(selectedDb)}/measurements`, {
+        const measurementsRes = await fetch(`${baseUrl}/api/v1/databases/${encodeURIComponent(selectedDb)}/measurements`, {
           headers: { 'Authorization': `Bearer ${activeServer.token}` }
         });
         const measurementsData = await measurementsRes.json();
@@ -759,7 +760,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
         // Fetch columns for all measurements in parallel
         await Promise.all(measurementsList.map(async (m: { name: string }) => {
           try {
-            const queryRes = await fetch(`${serverBaseUrl}/api/v1/query`, {
+            const queryRes = await fetch(`${baseUrl}/api/v1/query`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',

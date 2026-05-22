@@ -1,40 +1,36 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Building2, Edit2, Plus, RefreshCw, Shield, Trash2, UserPlus, Users, X,
-  Search, Key, Loader2, Copy, Ban, RotateCcw, KeyRound,
-  AlertTriangle, MoreVertical, Check, Minus,
+  Building2, Edit2, Plus, Shield, Trash2, UserPlus, Users, X,
+  Search,
+  Check, Minus,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useServers } from '../contexts/ServerContext';
+import { serverBaseUrl } from '../utils/server';
+import ConfirmModal from '../components/ConfirmModal';
 import './Rbac.css';
 
 // ─── Types ──────────────────────────────────────────────
 type Id = number;
 type NodeType = 'organization' | 'team' | 'role';
-type TabType = 'rbac' | 'tokens';
 
 interface Organization { id: Id; name: string; description?: string; enabled: boolean; }
 interface Team { id: Id; organization_id: Id; name: string; description?: string; enabled: boolean; }
-interface Role { id: Id; team_id: Id; database_pattern: string; permissions: string[]; description?: string; enabled: boolean; }
+interface Role { id: Id; team_id: Id; database_pattern: string; permissions: string[]; description?: string; }
 interface MeasurementPermission { id: Id; role_id: Id; measurement_pattern: string; permissions: string[]; }
 interface TokenInfo { id: Id; name: string; description?: string; permissions: string[]; created_at: string; last_used_at?: string; enabled: boolean; expires_at?: string; }
 
 const ROLE_PERM_OPTIONS = ['read', 'write', 'delete', 'admin'] as const;
 const DEFAULT_MEAS_PERM_MAP: Record<string, boolean> = { read: true, write: true, delete: false, admin: false };
 
-function serverBaseUrl(protocol: string, host: string) { return `${protocol}${host}`.replace(/\/$/, ''); }
 function permsToMap(perms: string[]) { return { read: perms.includes('read'), write: perms.includes('write'), delete: perms.includes('delete'), admin: perms.includes('admin') }; }
 function mapToPerms(map: Record<string, boolean>) { return ROLE_PERM_OPTIONS.filter((p) => map[p]); }
-function permModeLabel(perms: string[]): string { if (!perms.length) return 'RBAC'; const s = new Set(perms); if (s.size === 2 && s.has('read') && s.has('write')) return '默认'; return '自定义'; }
-function permModeLabelEn(perms: string[]): string { if (!perms.length) return 'RBAC'; const s = new Set(perms); if (s.size === 2 && s.has('read') && s.has('write')) return 'Default'; return 'Custom'; }
-function formatTs(iso?: string) { if (!iso) return '—'; try { return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); } catch { return iso; } }
-
+function permModeLabel(perms: string[]): string { return perms.length ? perms.join(', ') : 'RBAC'; }
 // ─── Main Page ──────────────────────────────────────────
 export default function Rbac() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.toLowerCase().startsWith('zh');
   const { activeServer } = useServers();
-  const [activeTab, setActiveTab] = useState<TabType>('rbac');
 
   const headers = useMemo(() => activeServer ? { Authorization: `Bearer ${activeServer.token}`, 'Content-Type': 'application/json' as const } : null, [activeServer]);
   const baseUrl = useMemo(() => activeServer ? serverBaseUrl(activeServer.protocol, activeServer.host) : '', [activeServer]);
@@ -48,27 +44,17 @@ export default function Rbac() {
   }, [headers]);
 
   return (
-    <div className="rbac-page">
-      <div className="rbac-header">
-        <div>
-          <h1>{t('nav.permission')}</h1>
-          <p>{isZh ? '管理组织、团队、角色和访问令牌' : 'Manage organizations, teams, roles and access tokens'}</p>
+    <div className="page-container">
+      <div className="page-header">
+        <div className="page-header-text">
+          <h1>{t('nav.rbac')}</h1>
+          <p>{isZh ? '按组织、团队、角色管理数据访问权限' : 'Manage data access by organizations, teams and roles'}</p>
         </div>
       </div>
 
       {!activeServer && <div className="rbac-alert">{t('views.rbac.selectServerFirst')}</div>}
 
-      <div className="rbac-tabs">
-        <button className={`rbac-tab ${activeTab === 'rbac' ? 'active' : ''}`} onClick={() => setActiveTab('rbac')}>
-          <Shield size={15} /> {isZh ? 'RBAC 体系' : 'RBAC'}
-        </button>
-        <button className={`rbac-tab ${activeTab === 'tokens' ? 'active' : ''}`} onClick={() => setActiveTab('tokens')}>
-          <Key size={15} /> {isZh ? 'Token 管理' : 'Tokens'}
-        </button>
-      </div>
-
-      {activeTab === 'rbac' && <RBACTab headers={headers} baseUrl={baseUrl} apiJson={apiJson} />}
-      {activeTab === 'tokens' && <TokenTab headers={headers} baseUrl={baseUrl} apiJson={apiJson} />}
+      <RBACTab headers={headers} baseUrl={baseUrl} apiJson={apiJson} />
     </div>
   );
 }
@@ -96,6 +82,14 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
   const [roleModal, setRoleModal] = useState<{ open: boolean; edit?: Role; teamId?: Id }>({ open: false });
   const [measModalOpen, setMeasModalOpen] = useState(false);
 
+  // Delete confirmation
+  type DeleteTarget =
+    | { type: 'organization'; id: Id; name: string }
+    | { type: 'team'; id: Id; name: string }
+    | { type: 'role'; id: Id; name: string }
+    | { type: 'measurement'; id: Id };
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+
   // Token bind modal (single-step)
   const [bindModalOpen, setBindModalOpen] = useState(false);
   const [bindTokenSearch, setBindTokenSearch] = useState('');
@@ -116,9 +110,6 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
   const teamTokens = useMemo(() => tokens.filter(t => teamTokenIds.includes(t.id)), [tokens, teamTokenIds]);
 
   // Stats
-  const orgTeamCount = useMemo(() => selectedOrg ? teamsByOrg.get(selectedOrg.id)?.length || 0 : 0, [selectedOrg, teamsByOrg]);
-  const orgRoleCount = useMemo(() => selectedOrg ? (teamsByOrg.get(selectedOrg.id) || []).reduce((s, t) => s + (rolesByTeam.get(t.id)?.length || 0), 0) : 0, [selectedOrg, teamsByOrg, rolesByTeam]);
-  const teamRoleCount = useMemo(() => selectedTeam ? rolesByTeam.get(selectedTeam.id)?.length || 0 : 0, [selectedTeam, rolesByTeam]);
 
   // Filtered tree
   const filteredOrgs = useMemo(() => {
@@ -251,6 +242,7 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
             <strong>{t('views.rbac.resourceTree')}</strong>
             <button className="btn btn-primary btn-small" onClick={() => setOrgModal({ open: true })}><Plus size={14} /> {t('views.rbac.organization')}</button>
           </div>
+          <p className="tree-hint">{isZh ? '层级：组织 → 团队 → 角色。Token 加入团队后自动继承团队下所有角色的权限。' : 'Hierarchy: Organization → Team → Role. Tokens joined to a team inherit all role permissions.'}</p>
           <div className="rbac-tree-search">
             <Search size={14} />
             <input placeholder={isZh ? '搜索组织、团队、角色...' : 'Search...'} value={treeSearch} onChange={e => setTreeSearch(e.target.value)} />
@@ -265,7 +257,7 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
                   <span className="node-actions">
                     <span className={`status-dot ${org.enabled ? 'on' : 'off'}`} />
                     <Edit2 size={13} onClick={e => { e.stopPropagation(); setOrgModal({ open: true, edit: org }); }} />
-                    <Trash2 size={13} onClick={e => { e.stopPropagation(); deleteOrganization(org.id); }} />
+                    <Trash2 size={13} onClick={e => { e.stopPropagation(); setDeleteTarget({ type: 'organization', id: org.id, name: org.name }); }} />
                   </span>
                 </button>
                 <div className="tree-children">
@@ -276,18 +268,17 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
                         <span className="node-actions">
                           <span className={`status-dot ${team.enabled ? 'on' : 'off'}`} />
                           <Edit2 size={13} onClick={e => { e.stopPropagation(); setTeamModal({ open: true, edit: team }); }} />
-                          <Trash2 size={13} onClick={e => { e.stopPropagation(); deleteTeam(team.id); }} />
+                          <Trash2 size={13} onClick={e => { e.stopPropagation(); setDeleteTarget({ type: 'team', id: team.id, name: team.name }); }} />
                         </span>
                       </button>
                       <div className="tree-children">
                         {(rolesByTeam.get(team.id) || []).map(role => (
-                          <button key={role.id} className={`tree-node role ${selectedType === 'role' && selectedId === role.id ? 'active' : ''} ${!role.enabled ? 'disabled' : ''}`} onClick={() => { setSelectedType('role'); setSelectedId(role.id); }}>
+                          <button key={role.id} className={`tree-node role ${selectedType === 'role' && selectedId === role.id ? 'active' : ''}`} onClick={() => { setSelectedType('role'); setSelectedId(role.id); }}>
                             <span className="tree-node-main"><Shield size={14} /><span>{role.database_pattern}</span></span>
                             <span className="node-actions">
                               <span className="perm-tags">{role.permissions.map(p => <span key={p} className="perm-tag">{p[0]}</span>)}</span>
-                              <span className={`status-dot ${role.enabled ? 'on' : 'off'}`} />
                               <Edit2 size={13} onClick={e => { e.stopPropagation(); setRoleModal({ open: true, edit: role }); }} />
-                              <Trash2 size={13} onClick={e => { e.stopPropagation(); deleteRole(role.id); }} />
+                              <Trash2 size={13} onClick={e => { e.stopPropagation(); setDeleteTarget({ type: 'role', id: role.id, name: role.database_pattern }); }} />
                             </span>
                           </button>
                         ))}
@@ -312,17 +303,12 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
                 <div className="detail-title-left">
                   <h3>{selectedOrg.name}</h3>
                   <span className="detail-badge">{t('views.rbac.organizationLabel')}</span>
-                  <span className="detail-meta">ID: {selectedOrg.id} · {selectedOrg.enabled ? <><span className="status-dot on" /> {isZh ? '启用' : 'Active'}</> : <><span className="status-dot off" /> {isZh ? '禁用' : 'Disabled'}</>}</span>
+                  <span className="detail-meta">{selectedOrg.enabled ? <><span className="status-dot on" /> {isZh ? '启用' : 'Active'}</> : <><span className="status-dot off" /> {isZh ? '禁用' : 'Disabled'}</>}</span>
                 </div>
                 <div className="detail-title-right">
                   <button className="btn btn-outlined btn-small" onClick={() => setOrgModal({ open: true, edit: selectedOrg })}><Edit2 size={14} /> {isZh ? '编辑' : 'Edit'}</button>
-                  <button className="btn btn-outlined btn-small" onClick={() => deleteOrganization(selectedOrg.id)}><Trash2 size={14} /> {isZh ? '删除' : 'Delete'}</button>
+                  <button className="btn btn-outlined btn-small" onClick={() => setDeleteTarget({ type: 'organization', id: selectedOrg.id, name: selectedOrg.name })}><Trash2 size={14} /> {isZh ? '删除' : 'Delete'}</button>
                 </div>
-              </div>
-
-              <div className="detail-stats">
-                <div className="stat-card"><div className="stat-value">{orgTeamCount}</div><div className="stat-label">{isZh ? '团队' : 'Teams'}</div></div>
-                <div className="stat-card"><div className="stat-value">{orgRoleCount}</div><div className="stat-label">{isZh ? '角色' : 'Roles'}</div></div>
               </div>
 
               <div className="detail-section">
@@ -331,16 +317,15 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
                   <button className="btn btn-primary btn-small" onClick={() => setTeamModal({ open: true, orgId: selectedOrg.id })}><Plus size={14} /> {t('views.rbac.team')}</button>
                 </div>
                 <table className="rbac-table">
-                  <thead><tr><th>{isZh ? '名称' : 'Name'}</th><th>{isZh ? '角色数' : 'Roles'}</th><th>{isZh ? '状态' : 'Status'}</th></tr></thead>
+                  <thead><tr><th>{isZh ? '名称' : 'Name'}</th><th>{isZh ? '状态' : 'Status'}</th></tr></thead>
                   <tbody>
                     {(teamsByOrg.get(selectedOrg.id) || []).map(tm => (
                       <tr key={tm.id} className="clickable-row" onClick={() => { setSelectedType('team'); setSelectedId(tm.id); }}>
                         <td><Users size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />{tm.name}</td>
-                        <td>{rolesByTeam.get(tm.id)?.length || 0}</td>
                         <td>{tm.enabled ? <><span className="status-dot on" /> {isZh ? '启用' : 'Active'}</> : <><span className="status-dot off" /> {isZh ? '禁用' : 'Disabled'}</>}</td>
                       </tr>
                     ))}
-                    {(teamsByOrg.get(selectedOrg.id) || []).length === 0 && <tr><td colSpan={3} className="rbac-empty">{isZh ? '暂无团队' : 'No teams'}</td></tr>}
+                    {(teamsByOrg.get(selectedOrg.id) || []).length === 0 && <tr><td colSpan={2} className="rbac-empty">{isZh ? '暂无团队' : 'No teams'}</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -353,17 +338,12 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
                 <div className="detail-title-left">
                   <h3>{selectedTeam.name}</h3>
                   <span className="detail-badge">{t('views.rbac.teamLabel')}</span>
-                  <span className="detail-meta">ID: {selectedTeam.id} · {selectedTeam.enabled ? <><span className="status-dot on" /> {isZh ? '启用' : 'Active'}</> : <><span className="status-dot off" /> {isZh ? '禁用' : 'Disabled'}</>}</span>
+                  <span className="detail-meta">{selectedTeam.enabled ? <><span className="status-dot on" /> {isZh ? '启用' : 'Active'}</> : <><span className="status-dot off" /> {isZh ? '禁用' : 'Disabled'}</>}</span>
                 </div>
                 <div className="detail-title-right">
                   <button className="btn btn-outlined btn-small" onClick={() => setTeamModal({ open: true, edit: selectedTeam })}><Edit2 size={14} /> {isZh ? '编辑' : 'Edit'}</button>
-                  <button className="btn btn-outlined btn-small" onClick={() => deleteTeam(selectedTeam.id)}><Trash2 size={14} /> {isZh ? '删除' : 'Delete'}</button>
+                  <button className="btn btn-outlined btn-small" onClick={() => setDeleteTarget({ type: 'team', id: selectedTeam.id, name: selectedTeam.name })}><Trash2 size={14} /> {isZh ? '删除' : 'Delete'}</button>
                 </div>
-              </div>
-
-              <div className="detail-stats">
-                <div className="stat-card"><div className="stat-value">{teamRoleCount}</div><div className="stat-label">{isZh ? '角色' : 'Roles'}</div></div>
-                <div className="stat-card"><div className="stat-value">{teamTokens.length}</div><div className="stat-label">{isZh ? '成员' : 'Members'}</div></div>
               </div>
 
               <div className="detail-section">
@@ -371,14 +351,15 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
                   <h4>{isZh ? '成员 (Token)' : 'Members (Token)'}</h4>
                   <button className="btn btn-primary btn-small" onClick={openBindModal}><UserPlus size={14} /> {isZh ? '添加成员' : 'Add member'}</button>
                 </div>
+                <p className="section-hint">{isZh ? '将 Token 绑定到团队，该 Token 即可获得团队下所有角色定义的数据库权限。' : 'Bind a Token to this team to grant it all database permissions defined by the team\'s roles.'}</p>
                 <table className="rbac-table">
-                  <thead><tr><th>{isZh ? '名称' : 'Name'}</th><th>{isZh ? '状态' : 'Status'}</th><th>{isZh ? '权限模式' : 'Perm mode'}</th><th>{isZh ? '操作' : 'Actions'}</th></tr></thead>
+                  <thead><tr><th>{isZh ? '名称' : 'Name'}</th><th>{isZh ? '状态' : 'Status'}</th><th>{isZh ? '权限' : 'Permissions'}</th><th>{isZh ? '操作' : 'Actions'}</th></tr></thead>
                   <tbody>
                     {teamTokens.map(tk => (
                       <tr key={tk.id}>
                         <td>{tk.name}</td>
                         <td>{tk.enabled ? <><span className="status-dot on" /> {isZh ? '启用' : 'Active'}</> : <><span className="status-dot off" /> {isZh ? '已吊销' : 'Revoked'}</>}</td>
-                        <td><span className="perm-mode-badge">{isZh ? permModeLabel(tk.permissions) : permModeLabelEn(tk.permissions)}</span></td>
+                        <td><span className="perm-mode-badge">{permModeLabel(tk.permissions)}</span></td>
                         <td><button className="btn btn-ghost btn-small" onClick={() => unbindTokenFromTeam(tk.id)}><Trash2 size={13} /> {t('views.rbac.unbind')}</button></td>
                       </tr>
                     ))}
@@ -392,18 +373,18 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
                   <h4>{isZh ? '角色列表' : 'Roles'}</h4>
                   <button className="btn btn-primary btn-small" onClick={() => setRoleModal({ open: true, teamId: selectedTeam.id })}><Plus size={14} /> {t('views.rbac.newRole')}</button>
                 </div>
+                <p className="section-hint">{isZh ? '每个角色定义一组 database_pattern + 权限（read/write/delete/admin）。"测量权限数"表示该角色下进一步按 measurement 细化的规则条数。' : 'Each role defines a database_pattern + permissions (read/write/delete/admin). "Meas. perms" counts fine-grained measurement-level rules under this role.'}</p>
                 <table className="rbac-table">
-                  <thead><tr><th>{isZh ? 'Pattern' : 'Pattern'}</th><th>{isZh ? '权限' : 'Permissions'}</th><th>{isZh ? '测量权限数' : 'Meas. perms'}</th><th>{isZh ? '状态' : 'Status'}</th></tr></thead>
+                  <thead><tr><th>{isZh ? 'Pattern' : 'Pattern'}</th><th>{isZh ? '权限' : 'Permissions'}</th><th>{isZh ? '测量权限数' : 'Meas. perms'}</th></tr></thead>
                   <tbody>
                     {(rolesByTeam.get(selectedTeam.id) || []).map(role => (
                       <tr key={role.id} className="clickable-row" onClick={() => { setSelectedType('role'); setSelectedId(role.id); }}>
                         <td><Shield size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />{role.database_pattern}</td>
                         <td><div className="perm-badges">{role.permissions.map(p => <span key={p} className="perm-badge">{p}</span>)}</div></td>
                         <td>{measPerms.filter(m => m.role_id === role.id).length}</td>
-                        <td>{role.enabled ? <><span className="status-dot on" /> {isZh ? '启用' : 'Active'}</> : <><span className="status-dot off" /> {isZh ? '禁用' : 'Disabled'}</>}</td>
                       </tr>
                     ))}
-                    {(rolesByTeam.get(selectedTeam.id) || []).length === 0 && <tr><td colSpan={4} className="rbac-empty">{t('views.rbac.noData')}</td></tr>}
+                    {(rolesByTeam.get(selectedTeam.id) || []).length === 0 && <tr><td colSpan={3} className="rbac-empty">{t('views.rbac.noData')}</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -416,22 +397,27 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
                 <div className="detail-title-left">
                   <h3>{selectedRole.database_pattern}</h3>
                   <span className="detail-badge">{t('views.rbac.roleLabel')}</span>
-                  <span className="detail-meta">ID: {selectedRole.id} · {selectedRole.enabled ? <><span className="status-dot on" /> {isZh ? '启用' : 'Active'}</> : <><span className="status-dot off" /> {isZh ? '禁用' : 'Disabled'}</>}</span>
                 </div>
                 <div className="detail-title-right">
                   <button className="btn btn-outlined btn-small" onClick={() => setRoleModal({ open: true, edit: selectedRole })}><Edit2 size={14} /> {isZh ? '编辑' : 'Edit'}</button>
-                  <button className="btn btn-outlined btn-small" onClick={() => deleteRole(selectedRole.id)}><Trash2 size={14} /> {isZh ? '删除' : 'Delete'}</button>
+                  <button className="btn btn-outlined btn-small" onClick={() => setDeleteTarget({ type: 'role', id: selectedRole.id, name: selectedRole.database_pattern })}><Trash2 size={14} /> {isZh ? '删除' : 'Delete'}</button>
                 </div>
               </div>
 
               <div className="detail-section">
-                <h4>{isZh ? '数据库级权限' : 'Database permissions'}</h4>
-                <div className="perm-matrix">
-                  <table className="perm-matrix-table">
-                    <thead><tr>{ROLE_PERM_OPTIONS.map(p => <th key={p}>{p}</th>)}</tr></thead>
-                    <tbody><tr>{ROLE_PERM_OPTIONS.map(p => <td key={p}>{selectedRole.permissions.includes(p) ? <Check size={16} className="perm-check" /> : <Minus size={16} className="perm-uncheck" />}</td>)}</tr></tbody>
-                  </table>
+                <div className="detail-section-head">
+                  <h4>{isZh ? '数据库级权限' : 'Database permissions'}</h4>
                 </div>
+                <p className="section-hint">{isZh ? '匹配 database_pattern 的数据库将获得对应权限。可用通配符 * 匹配所有数据库。' : 'Databases matching the database_pattern will receive the corresponding permissions. Use * to match all databases.'}</p>
+                <table className="rbac-table">
+                  <thead><tr><th>{isZh ? 'Pattern' : 'Pattern'}</th><th>{isZh ? '权限' : 'Permissions'}</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td><Shield size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />{selectedRole.database_pattern}</td>
+                      <td><div className="perm-badges">{selectedRole.permissions.map(p => <span key={p} className="perm-badge">{p}</span>)}</div></td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
               <div className="detail-section">
@@ -439,6 +425,7 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
                   <h4>{t('views.rbac.measurementPermissions')}</h4>
                   <button className="btn btn-primary btn-small" onClick={() => setMeasModalOpen(true)}><Plus size={14} /> {isZh ? '新增' : 'Add'}</button>
                 </div>
+                <p className="section-hint">{isZh ? '在角色的数据库权限基础上，进一步按 measurement_pattern 限定可访问的表。例如 cpu_* 只允许访问以 cpu_ 开头的 measurement。' : 'On top of the role\'s database permissions, further restrict access by measurement_pattern. E.g. cpu_* only allows access to measurements starting with cpu_.'}</p>
                 <table className="rbac-table">
                   <thead><tr><th>{isZh ? 'Pattern' : 'Pattern'}</th><th>{isZh ? '权限' : 'Permissions'}</th><th>{isZh ? '操作' : 'Actions'}</th></tr></thead>
                   <tbody>
@@ -446,7 +433,7 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
                       <tr key={m.id}>
                         <td>{m.measurement_pattern}</td>
                         <td><div className="perm-badges">{m.permissions.map(p => <span key={p} className="perm-badge">{p}</span>)}</div></td>
-                        <td><button className="btn btn-ghost btn-small" onClick={() => deleteMeasurementPermission(m.id)}><Trash2 size={13} /> {t('views.rbac.delete')}</button></td>
+                        <td><button className="btn btn-ghost btn-small" onClick={() => setDeleteTarget({ type: 'measurement', id: m.id })}><Trash2 size={13} /> {t('views.rbac.delete')}</button></td>
                       </tr>
                     ))}
                     {selectedRoleMeasPerms.length === 0 && <tr><td colSpan={3} className="rbac-empty">{t('views.rbac.noData')}</td></tr>}
@@ -455,7 +442,10 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
               </div>
 
               <div className="detail-section">
-                <h4>{isZh ? '权限生效预览' : 'Effective preview'}</h4>
+                <div className="detail-section-head">
+                  <h4>{isZh ? '权限生效预览' : 'Effective preview'}</h4>
+                </div>
+                <p className="section-hint">{isZh ? '展示该角色最终生效的权限组合：数据库级权限为基底，measurement 级规则在此基础上进一步收窄。' : 'Shows the effective permission combination: database-level permissions as the base, measurement rules further narrow the scope.'}</p>
                 <div className="perm-preview-box">
                   <div className="perm-preview-row">
                     <span className="perm-preview-db">{selectedRole.database_pattern}</span>
@@ -498,7 +488,7 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
                     <input type="radio" name="bindToken" checked={bindSelectedTokenId === tk.id} onChange={() => setBindSelectedTokenId(tk.id)} />
                     <span className="bind-token-name">{tk.name} <span className="bind-token-id">#{tk.id}</span></span>
                     <span className={`status-dot ${tk.enabled ? 'on' : 'off'}`} />
-                    <span className="bind-token-perms">{isZh ? permModeLabel(tk.permissions) : permModeLabelEn(tk.permissions)}</span>
+                    <span className="bind-token-perms">{permModeLabel(tk.permissions)}</span>
                   </label>
                 ))}
                 {filteredTokens.length === 0 && <div className="rbac-empty">{isZh ? '无匹配 Token' : 'No matching tokens'}</div>}
@@ -517,134 +507,31 @@ function RBACTab({ headers, baseUrl, apiJson }: { headers: Record<string, string
           </div>
         </div>
       )}
-    </>
-  );
-}
 
-// ─── Token Tab ──────────────────────────────────────────
-function TokenTab({ headers, baseUrl, apiJson }: { headers: Record<string, string> | null; baseUrl: string; apiJson: (url: string, init?: RequestInit) => Promise<any> }) {
-  const { t, i18n } = useTranslation();
-  const isZh = i18n.language.toLowerCase().startsWith('zh');
-
-  const [tokens, setTokens] = useState<TokenInfo[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editToken, setEditToken] = useState<TokenInfo | null>(null);
-  const [deleteId, setDeleteId] = useState<Id | null>(null);
-  const [revokeId, setRevokeId] = useState<Id | null>(null);
-  const [rotateId, setRotateId] = useState<Id | null>(null);
-  const [rbacToken, setRbacToken] = useState<TokenInfo | null>(null);
-  const [secret, setSecret] = useState<{ title: string; value: string } | null>(null);
-  const [menuOpenId, setMenuOpenId] = useState<Id | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  const fetchTokens = useCallback(async () => {
-    if (!headers || !baseUrl) return; setLoading(true); setError(null);
-    try {
-      const data = await apiJson(`${baseUrl}/api/v1/auth/tokens`);
-      setTokens(Array.isArray(data.tokens) ? data.tokens : []);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load tokens'); setTokens([]); }
-    finally { setLoading(false); }
-  }, [headers, baseUrl, apiJson]);
-
-  useEffect(() => { fetchTokens(); }, [fetchTokens]);
-
-  // Close menu on outside click
-  useEffect(() => {
-    if (menuOpenId === null) return;
-    const handler = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpenId(null); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [menuOpenId]);
-
-  const filtered = useMemo(() => { const q = search.toLowerCase(); if (!q) return tokens; return tokens.filter(t => t.name.toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q)); }, [tokens, search]);
-
-  const copySecret = async (v: string) => { try { await navigator.clipboard.writeText(v); } catch {} };
-
-  return (
-    <>
-      {error && <div className="rbac-alert">{error} <button className="icon-btn" onClick={() => setError(null)}><X size={14} /></button></div>}
-
-      <div className="tokens-toolbar-bar">
-        <div className="tokens-search-wrap">
-          <Search size={14} />
-          <input className="tokens-search" type="search" placeholder={t('views.tokens.filterPlaceholder')} value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <button className="btn btn-outlined" onClick={fetchTokens} disabled={!headers || loading}><RefreshCw size={16} className={loading ? 'spin' : ''} /> {t('common.refresh')}</button>
-        <button className="btn btn-primary" onClick={() => setCreateOpen(true)} disabled={!headers}><Plus size={16} /> {t('views.tokens.createToken')}</button>
-      </div>
-
-      {loading && tokens.length === 0 && <div className="loading-inline"><Loader2 className="spin" size={18} /> {t('views.tokens.loadingTokens')}</div>}
-      {!loading && tokens.length === 0 && !error && <div className="tokens-empty">{t('views.tokens.noTokensYet')}</div>}
-      {!loading && filtered.length === 0 && tokens.length > 0 && <div className="tokens-empty">{t('views.tokens.noTokensMatch')}</div>}
-
-      {filtered.length > 0 && (
-        <div className="tokens-table-wrap">
-          <table className="tokens-table">
-            <thead>
-              <tr>
-                <th>{t('views.tokens.name')}</th>
-                <th>{isZh ? '权限模式' : 'Perm mode'}</th>
-                <th>{isZh ? '所属团队' : 'Teams'}</th>
-                <th>{t('views.tokens.status')}</th>
-                <th>{t('views.tokens.created')}</th>
-                <th>{t('views.tokens.actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(item => (
-                <tr key={item.id}>
-                  <td className="token-name-cell">{item.name}{item.description ? <div className="token-desc">{item.description}</div> : null}</td>
-                  <td><span className="perm-mode-badge">{isZh ? permModeLabel(item.permissions) : permModeLabelEn(item.permissions)}</span></td>
-                  <td className="text-muted">—</td>
-                  <td><span className={`status-badge ${item.enabled ? 'active' : 'revoked'}`}>{item.enabled ? t('views.tokens.active') : t('views.tokens.revoked')}</span></td>
-                  <td className="text-muted">{formatTs(item.created_at)}</td>
-                  <td>
-                    <div className="token-actions-cell" style={{ position: 'relative' }}>
-                      <button className="btn btn-ghost btn-small" onClick={() => setMenuOpenId(menuOpenId === item.id ? null : item.id)}><MoreVertical size={14} /></button>
-                      {menuOpenId === item.id && (
-                        <div className="token-dropdown-menu" ref={menuRef}>
-                          <button onClick={() => { setRbacToken(item); setMenuOpenId(null); }}><Shield size={14} /> RBAC</button>
-                          <button onClick={() => { setEditToken(item); setMenuOpenId(null); }}><Edit2 size={14} /> {t('views.tokens.edit')}</button>
-                          <button onClick={() => { setRotateId(item.id); setMenuOpenId(null); }} disabled={!item.enabled}><RotateCcw size={14} /> {t('views.tokens.rotate')}</button>
-                          <button onClick={() => { setRevokeId(item.id); setMenuOpenId(null); }} disabled={!item.enabled}><Ban size={14} /> {t('views.tokens.revoke')}</button>
-                          <div className="dropdown-divider" />
-                          <button className="danger" onClick={() => { setDeleteId(item.id); setMenuOpenId(null); }}><Trash2 size={14} /> {t('views.tokens.delete')}</button>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {deleteTarget && (
+        <ConfirmModal
+          title={t('views.rbac.delete')}
+          description={
+            deleteTarget.type === 'organization'
+              ? t('views.rbac.deleteOrgConfirm', { name: deleteTarget.name })
+              : deleteTarget.type === 'team'
+              ? t('views.rbac.deleteTeamConfirm', { name: deleteTarget.name })
+              : deleteTarget.type === 'role'
+              ? t('views.rbac.deleteRoleConfirm', { name: deleteTarget.name })
+              : t('views.rbac.deleteMeasPermConfirm')
+          }
+          confirmLabel={t('common.confirmDelete')}
+          danger
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            if (deleteTarget.type === 'organization') deleteOrganization(deleteTarget.id);
+            else if (deleteTarget.type === 'team') deleteTeam(deleteTarget.id);
+            else if (deleteTarget.type === 'role') deleteRole(deleteTarget.id);
+            else deleteMeasurementPermission(deleteTarget.id);
+            setDeleteTarget(null);
+          }}
+        />
       )}
-
-      {/* Modals */}
-      {createOpen && headers && <CreateTokenModal baseUrl={baseUrl} headers={headers} onClose={() => setCreateOpen(false)} onCreated={plain => { setCreateOpen(false); setSecret({ title: t('views.tokens.tokenCreated'), value: plain }); fetchTokens(); }} />}
-      {editToken && headers && <EditTokenModal token={editToken} baseUrl={baseUrl} headers={headers} onClose={() => setEditToken(null)} onSaved={() => { setEditToken(null); fetchTokens(); }} />}
-      {secret && (
-        <div className="modal-overlay" role="dialog" aria-modal onClick={() => setSecret(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header"><h3>{secret.title}</h3><button className="icon-btn" onClick={() => setSecret(null)}><X size={18} /></button></div>
-            <div className="modal-body">
-              <p className="hint-text">{t('views.tokens.copyNowHint')}</p>
-              <div className="secret-box">{secret.value}</div>
-              <div className="modal-actions" style={{ border: 'none', marginTop: 0, paddingTop: 0 }}>
-                <button className="btn btn-primary" onClick={() => copySecret(secret.value)}><Copy size={16} /> {t('views.tokens.copyToClipboard')}</button>
-                <button className="btn btn-outlined" onClick={() => setSecret(null)}>{t('views.tokens.done')}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {deleteId !== null && headers && <ConfirmModal title={t('views.tokens.deleteToken')} description={t('views.tokens.deleteTokenDesc')} confirmLabel={t('views.tokens.delete')} danger onCancel={() => setDeleteId(null)} onConfirm={async () => { await apiJson(`${baseUrl}/api/v1/auth/tokens/${deleteId}`, { method: 'DELETE' }); setDeleteId(null); fetchTokens(); }} />}
-      {revokeId !== null && headers && <ConfirmModal title={t('views.tokens.revokeToken')} description={t('views.tokens.revokeTokenDesc')} confirmLabel={t('views.tokens.revoke')} danger onCancel={() => setRevokeId(null)} onConfirm={async () => { await apiJson(`${baseUrl}/api/v1/auth/tokens/${revokeId}/revoke`, { method: 'POST' }); setRevokeId(null); fetchTokens(); }} />}
-      {rotateId !== null && headers && <ConfirmModal title={t('views.tokens.rotateToken')} description={t('views.tokens.rotateTokenDesc')} confirmLabel={t('views.tokens.rotate')} onCancel={() => setRotateId(null)} onConfirm={async () => { const data = await apiJson(`${baseUrl}/api/v1/auth/tokens/${rotateId}/rotate`, { method: 'POST' }); setRotateId(null); fetchTokens(); if (data.new_token) setSecret({ title: t('views.tokens.newTokenSecret'), value: data.new_token }); }} />}
-      {rbacToken && headers && <RbacModal token={rbacToken} baseUrl={baseUrl} headers={headers} onClose={() => setRbacToken(null)} />}
     </>
   );
 }
@@ -675,23 +562,6 @@ function PermMatrixPreview({ data }: { data: any }) {
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function ConfirmModal({ title, description, confirmLabel, danger, onCancel, onConfirm }: { title: string; description: string; confirmLabel: string; danger?: boolean; onCancel: () => void; onConfirm: () => void | Promise<void>; }) {
-  const { t } = useTranslation();
-  const [busy, setBusy] = useState(false);
-  return (
-    <div className="modal-overlay" role="dialog" aria-modal onClick={onCancel}>
-      <div className="modal-content confirm-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header"><h3>{danger && <AlertTriangle size={18} style={{ color: '#ef4444', marginRight: 8 }} />}{title}</h3><button className="icon-btn" onClick={onCancel}><X size={18} /></button></div>
-        <div className="modal-body"><p className="hint-text">{description}</p></div>
-        <div className="modal-actions modal-actions-bottom">
-          <button className="btn btn-outlined" onClick={onCancel} disabled={busy}>{t('common.cancel')}</button>
-          <button className={danger ? 'btn btn-danger' : 'btn btn-primary'} disabled={busy} onClick={async () => { setBusy(true); try { await onConfirm(); } finally { setBusy(false); } }}>{busy ? <Loader2 className="spin" size={16} /> : null}{confirmLabel}</button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -762,209 +632,6 @@ function MeasurementPermissionModal({ initialPattern, initialPerms, onClose, onS
           </div>
         </div>
         <div className="modal-actions modal-actions-bottom"><button className="btn btn-outlined" onClick={onClose}>{t('common.cancel')}</button><button className="btn btn-primary" onClick={() => onSave(pattern.trim(), perms)}>{t('views.rbac.save')}</button></div>
-      </div>
-    </div>
-  );
-}
-
-function RbacModal({ token, baseUrl, headers, onClose }: { token: TokenInfo; baseUrl: string; headers: Record<string, string>; onClose: () => void; }) {
-  const { t, i18n } = useTranslation();
-  const isZh = i18n.language.toLowerCase().startsWith('zh');
-  const [teams, setTeams] = useState<{ id: number; organization_id: number; name: string; enabled: boolean }[]>([]);
-  const [allTeams, setAllTeams] = useState<{ id: number; organization_id: number; name: string }[]>([]);
-  const [selectedTeamId, setSelectedTeamId] = useState<string>('');
-  const [permData, setPermData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [rbacErr, setRbacErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true); setRbacErr(null);
-    try {
-      const [tRes, pRes] = await Promise.all([
-        fetch(`${baseUrl}/api/v1/auth/tokens/${token.id}/teams`, { headers }),
-        fetch(`${baseUrl}/api/v1/auth/tokens/${token.id}/permissions`, { headers }),
-      ]);
-      const tData = await tRes.json().catch(() => ({}));
-      const pData = await pRes.json().catch(() => ({}));
-      if (tRes.ok && tData.success && Array.isArray(tData.teams)) setTeams(tData.teams); else setTeams([]);
-      if (pRes.ok && pData.success) setPermData(pData); else setPermData(null);
-
-      // Load all teams for dropdown
-      try {
-        const orgRes = await fetch(`${baseUrl}/api/v1/rbac/organizations`, { headers });
-        const orgData = await orgRes.json().catch(() => ({}));
-        if (orgRes.ok && Array.isArray(orgData.organizations)) {
-          const all: any[] = [];
-          for (const org of orgData.organizations) {
-            const tmRes = await fetch(`${baseUrl}/api/v1/rbac/organizations/${org.id}/teams`, { headers });
-            const tmData = await tmRes.json().catch(() => ({}));
-            if (tmRes.ok && Array.isArray(tmData.teams)) all.push(...tmData.teams);
-          }
-          setAllTeams(all);
-        }
-      } catch { /* ignore */ }
-    } catch (e) { setRbacErr(e instanceof Error ? e.message : t('views.tokens.failedToLoad')); }
-    finally { setLoading(false); }
-  }, [baseUrl, headers, token.id, t]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const addTeam = async () => {
-    const id = parseInt(selectedTeamId, 10); if (!Number.isFinite(id) || id <= 0) return;
-    setBusy(true);
-    try { const res = await fetch(`${baseUrl}/api/v1/auth/tokens/${token.id}/teams`, { method: 'POST', headers, body: JSON.stringify({ team_id: id }) }); if (!res.ok) { const d = await res.json().catch(() => ({})); setRbacErr(d.error || t('views.tokens.addFailed')); return; } setSelectedTeamId(''); load(); } finally { setBusy(false); }
-  };
-
-  const removeTeam = async (teamId: number) => {
-    setBusy(true);
-    try { const res = await fetch(`${baseUrl}/api/v1/auth/tokens/${token.id}/teams/${teamId}`, { method: 'DELETE', headers }); if (!res.ok) { setRbacErr(t('views.tokens.removeFailed')); return; } load(); } finally { setBusy(false); }
-  };
-
-  const availableTeams = allTeams.filter(t => !teams.some(et => et.id === t.id));
-
-  return (
-    <div className="modal-overlay" role="dialog" aria-modal onClick={onClose}>
-      <div className="modal-content modal-wide" onClick={e => e.stopPropagation()}>
-        <div className="modal-header"><h3><Users size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} />{isZh ? `RBAC — ${token.name}` : `RBAC — ${token.name}`}</h3><button className="icon-btn" onClick={onClose}><X size={18} /></button></div>
-        <div className="modal-body">
-          {rbacErr && <div className="rbac-alert">{rbacErr}</div>}
-          {loading ? <div className="loading-inline"><Loader2 className="spin" size={18} /> {t('views.tokens.loading')}</div> : (
-            <>
-              <h4>{t('views.tokens.teamMemberships')}</h4>
-              {teams.length === 0 && !rbacErr ? <p className="hint-text">{t('views.tokens.noTeams')}</p> : (
-                teams.map(tm => (
-                  <div key={tm.id} className="rbac-team-row">
-                    <div><strong>{tm.name}</strong><span className="text-muted" style={{ marginLeft: 8 }}>id {tm.id} · org {tm.organization_id}</span></div>
-                    <button className="btn btn-ghost btn-small" disabled={busy} onClick={() => removeTeam(tm.id)}>{t('views.tokens.remove')}</button>
-                  </div>
-                ))
-              )}
-
-              <div className="rbac-add-row">
-                <select value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)}>
-                  <option value="">{isZh ? '选择团队...' : 'Select team...'}</option>
-                  {availableTeams.map(t => <option key={t.id} value={t.id}>{t.name} (#{t.id})</option>)}
-                </select>
-                <button className="btn btn-outlined btn-small" disabled={busy || !selectedTeamId} onClick={addTeam}>{t('views.tokens.addToTeam')}</button>
-              </div>
-
-              <h4 style={{ marginTop: 24 }}>{t('views.tokens.effectivePermissions')}</h4>
-              <PermMatrixPreview data={permData} />
-            </>
-          )}
-          <div className="modal-actions" style={{ border: 'none', marginTop: 16, paddingTop: 0 }}>
-            <button className="btn btn-outlined" onClick={onClose}>{t('common.close')}</button>
-            <button className="btn btn-primary" onClick={load} disabled={loading}><RefreshCw size={16} /> {t('views.tokens.reload')}</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CreateTokenModal({ baseUrl, headers, onClose, onCreated }: { baseUrl: string; headers: Record<string, string>; onClose: () => void; onCreated: (plain: string) => void; }) {
-  const { t } = useTranslation();
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [permMode, setPermMode] = useState<'default' | 'custom' | 'rbac'>('default');
-  const [custom, setCustom] = useState<Record<string, boolean>>({ read: true, write: true, delete: false, admin: false });
-  const [expiresIn, setExpiresIn] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [localErr, setLocalErr] = useState<string | null>(null);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault(); setLocalErr(null); if (!name.trim()) { setLocalErr(t('views.tokens.nameRequired')); return; }
-    setSubmitting(true);
-    try {
-      const body: Record<string, unknown> = { name: name.trim(), description: description.trim() || undefined };
-      if (expiresIn) body.expires_in = expiresIn;
-      if (permMode === 'rbac') body.permissions = []; else if (permMode === 'custom') body.permissions = ROLE_PERM_OPTIONS.filter(p => custom[p]);
-      const res = await fetch(`${baseUrl}/api/v1/auth/tokens`, { method: 'POST', headers, body: JSON.stringify(body) });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setLocalErr((data as any).error || t('views.tokens.createFailed')); return; }
-      if (typeof data.token === 'string') onCreated(data.token); else { setLocalErr(t('views.tokens.createdNoToken')); onClose(); }
-    } catch (err) { setLocalErr(err instanceof Error ? err.message : t('views.tokens.requestFailed')); }
-    finally { setSubmitting(false); }
-  };
-
-  return (
-    <div className="modal-overlay" role="dialog" aria-modal>
-      <div className="modal-content modal-wide">
-        <div className="modal-header"><h3>{t('views.tokens.createApiToken')}</h3><button className="icon-btn" onClick={onClose}><X size={18} /></button></div>
-        <form className="modal-body" onSubmit={submit}>
-          {localErr && <div className="rbac-alert">{localErr}</div>}
-          <div className="form-group"><label>{t('views.tokens.name')}</label><input value={name} onChange={e => setName(e.target.value)} required placeholder={t('views.tokens.tokenNamePlaceholder')} /></div>
-          <div className="form-group"><label>{t('views.tokens.description')}</label><textarea value={description} onChange={e => setDescription(e.target.value)} placeholder={t('views.tokens.optional')} /></div>
-          <div className="form-group">
-            <label>{t('views.tokens.ossPermissions')}</label>
-            <select value={permMode} onChange={e => setPermMode(e.target.value as any)}>
-              <option value="default">{t('views.tokens.defaultReadWrite')}</option>
-              <option value="custom">{t('views.tokens.custom')}</option>
-              <option value="rbac">{t('views.tokens.noneRbacOnly')}</option>
-            </select>
-            <p className="hint-text">{t('views.tokens.rbacOnlyHint')}</p>
-          </div>
-          {permMode === 'custom' && <div className="form-group"><label>{t('views.tokens.scopes')}</label><div className="perm-checkboxes">{ROLE_PERM_OPTIONS.map(p => <label key={p}><input type="checkbox" checked={custom[p]} onChange={e => setCustom({ ...custom, [p]: e.target.checked })} />{p}</label>)}</div></div>}
-          <div className="form-group">
-            <label>{t('views.tokens.expiresIn')}</label>
-            <select value={expiresIn} onChange={e => setExpiresIn(e.target.value)}>
-              <option value="">{t('views.tokens.never')}</option>
-              <option value="24h">{t('views.tokens.hours24')}</option>
-              <option value="7d">{t('views.tokens.days7')}</option>
-              <option value="30d">{t('views.tokens.days30')}</option>
-              <option value="90d">{t('views.tokens.days90')}</option>
-            </select>
-          </div>
-          <div className="modal-actions" style={{ border: 'none', marginTop: 0, paddingTop: 0 }}>
-            <button type="button" className="btn btn-outlined" onClick={onClose}>{t('common.cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? <Loader2 className="spin" size={16} /> : <KeyRound size={16} />} {t('views.tokens.create')}</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function EditTokenModal({ token, baseUrl, headers, onClose, onSaved }: { token: TokenInfo; baseUrl: string; headers: Record<string, string>; onClose: () => void; onSaved: () => void; }) {
-  const { t } = useTranslation();
-  const [name, setName] = useState(token.name);
-  const [description, setDescription] = useState(token.description || '');
-  const [permMode, setPermMode] = useState<'default' | 'custom' | 'rbac'>(() => { if (!token.permissions?.length) return 'rbac'; const s = new Set(token.permissions); if (s.size === 2 && s.has('read') && s.has('write')) return 'default'; return 'custom'; });
-  const [custom, setCustom] = useState<Record<string, boolean>>(() => { const m: Record<string, boolean> = { read: false, write: false, delete: false, admin: false }; for (const p of token.permissions || []) { if (p in m) m[p] = true; } return m; });
-  const [expiresIn, setExpiresIn] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [localErr, setLocalErr] = useState<string | null>(null);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault(); setLocalErr(null); setSubmitting(true);
-    try {
-      const body: Record<string, unknown> = { name: name.trim(), description: description.trim() };
-      if (permMode === 'rbac') body.permissions = []; else if (permMode === 'custom') body.permissions = ROLE_PERM_OPTIONS.filter(p => custom[p]); else body.permissions = ['read', 'write'];
-      if (expiresIn) body.expires_in = expiresIn;
-      const res = await fetch(`${baseUrl}/api/v1/auth/tokens/${token.id}`, { method: 'PATCH', headers, body: JSON.stringify(body) });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); setLocalErr(d.error || t('views.tokens.updateFailed')); return; }
-      onSaved();
-    } catch (err) { setLocalErr(err instanceof Error ? err.message : t('views.tokens.requestFailed')); }
-    finally { setSubmitting(false); }
-  };
-
-  return (
-    <div className="modal-overlay" role="dialog" aria-modal>
-      <div className="modal-content modal-wide">
-        <div className="modal-header"><h3>{t('views.tokens.editToken')}</h3><button className="icon-btn" onClick={onClose}><X size={18} /></button></div>
-        <form className="modal-body" onSubmit={submit}>
-          {localErr && <div className="rbac-alert">{localErr}</div>}
-          <div className="form-group"><label>{t('views.tokens.name')}</label><input value={name} onChange={e => setName(e.target.value)} required /></div>
-          <div className="form-group"><label>{t('views.tokens.description')}</label><textarea value={description} onChange={e => setDescription(e.target.value)} /></div>
-          <div className="form-group"><label>{t('views.tokens.ossPermissions')}</label><select value={permMode} onChange={e => setPermMode(e.target.value as any)}><option value="default">{t('views.tokens.defaultReadWrite')}</option><option value="custom">{t('views.tokens.custom')}</option><option value="rbac">{t('views.tokens.noneRbacOnly')}</option></select></div>
-          {permMode === 'custom' && <div className="form-group"><label>{t('views.tokens.scopes')}</label><div className="perm-checkboxes">{ROLE_PERM_OPTIONS.map(p => <label key={p}><input type="checkbox" checked={custom[p]} onChange={e => setCustom({ ...custom, [p]: e.target.checked })} />{p}</label>)}</div></div>}
-          <div className="form-group"><label>{t('views.tokens.extendExpiry')}</label><select value={expiresIn} onChange={e => setExpiresIn(e.target.value)}><option value="">{t('views.tokens.doNotChange')}</option><option value="24h">{t('views.tokens.hours24')}</option><option value="7d">{t('views.tokens.days7')}</option><option value="30d">{t('views.tokens.days30')}</option><option value="90d">{t('views.tokens.days90')}</option></select><p className="hint-text">{t('views.tokens.extendExpiryHint')}</p></div>
-          <div className="modal-actions" style={{ border: 'none', marginTop: 0, paddingTop: 0 }}>
-            <button type="button" className="btn btn-outlined" onClick={onClose}>{t('common.cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? <Loader2 className="spin" size={16} /> : null} {t('views.tokens.save')}</button>
-          </div>
-        </form>
       </div>
     </div>
   );

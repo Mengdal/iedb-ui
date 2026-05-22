@@ -1,18 +1,12 @@
-/* Continuous Queries：主布局与 Tokens 页共用 Tokens.css，此处仅做少量补充 */
+/* Continuous Queries：页面特有样式，布局由 PageLayout.css 统一 */
 
-select.tokens-search.cq-toolbar-select {
-  cursor: pointer;
-  min-width: 160px;
-}
-
-.cq-toolbar {
-  justify-content: flex-end;
-  flex: 1;
+.plugins-cq-page .section-header {
+  align-items: flex-start;
 }
 
 .cq-section-left {
   min-width: 240px;
-  max-width: 460px;
+  max-width: 520px;
 }
 
 .cq-desc {
@@ -21,13 +15,23 @@ select.tokens-search.cq-toolbar-select {
   text-overflow: clip;
 }
 
-.plugins-cq-page .section-header {
-  align-items: center;
-  gap: 12px;
-}
-
 .plugins-cq-page .cq-toolbar {
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.plugins-cq-page .cq-toolbar .page-search {
+  min-width: 0;
+  width: auto;
+  flex: 1;
+  max-width: 200px;
+}
+
+.plugins-cq-page .cq-toolbar .cq-toolbar-select {
+  min-width: 0;
+  width: auto;
+  flex: 0 1 auto;
+  cursor: pointer;
 }
 
 .plugins-cq-page .tokens-table th:nth-child(3),

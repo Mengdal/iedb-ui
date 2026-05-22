@@ -13,9 +13,13 @@ import Databases from './views/Databases';
 import WriteData from './views/WriteData';
 import HelpDoc from './views/HelpDoc';
 import Rbac from './views/Rbac';
+import Tokens from './views/Tokens';
 import Plugins from './views/Plugins';
 import PluginsMqtt from './views/PluginsMqtt';
 import Dashboards from './views/Dashboards';
+import AuditLog from './views/AuditLog';
+import QueryManagement from './views/QueryManagement';
+import './views/PageLayout.css';
 import './App.css';
 
 export type CurrentView =
@@ -25,12 +29,15 @@ export type CurrentView =
   | 'servers'
   | 'databases'
   | 'rbac'
+  | 'tokens'
   | 'plugins'
   | 'plugins-mqtt'
   | 'commands'
   | 'dashboards'
   | 'integrations'
-  | 'help-doc';
+  | 'help-doc'
+  | 'audit-log'
+  | 'query-mgmt';
 
 const VIEW_STORAGE_KEY = 'iotedge-current-view';
 
@@ -105,9 +112,12 @@ function App() {
       case 'write-data': return <WriteData />;
       case 'help-doc': return <HelpDoc />;
       case 'rbac': return <Rbac />;
+      case 'tokens': return <Tokens />;
       case 'plugins': return <Plugins />;
       case 'plugins-mqtt': return <PluginsMqtt />;
       case 'dashboards': return <Dashboards onNavigate={setCurrentView} />;
+      case 'audit-log': return <AuditLog />;
+      case 'query-mgmt': return <QueryManagement />;
       default:
         return (
           <div className="placeholder-view">
@@ -154,11 +164,14 @@ function App() {
       case 'write-data': return t('views.writeData.title');
       case 'servers': return t('views.servers.title');
       case 'databases': return t('views.databases.title');
-      case 'rbac': return t('nav.permission');
+      case 'rbac': return t('nav.rbac');
+      case 'tokens': return t('nav.tokens');
       case 'plugins': return t('views.plugins.title');
       case 'plugins-mqtt': return t('views.pluginsMqtt.title');
       case 'dashboards': return t('views.dashboards.title');
       case 'integrations': return t('views.integrations.title');
+      case 'audit-log': return t('nav.auditLog');
+      case 'query-mgmt': return t('nav.queryManagement');
       case 'help-doc': return t('views.helpDoc.title');
       default: return t('views.placeholder.configuration');
     }

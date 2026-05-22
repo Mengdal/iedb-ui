@@ -1,6 +1,5 @@
 .mqtt-toolbar {
   justify-content: flex-end;
-  flex: 1;
 }
 
 .mqtt-section-left {
@@ -173,5 +172,79 @@
   box-sizing: border-box;
   white-space: normal;
   word-break: break-word;
+}
+
+/* Topic mapping rows */
+.mqtt-mapping-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.mqtt-mapping-row input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.mqtt-mapping-row input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.mqtt-mapping-arrow {
+  color: var(--text-muted);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* Advanced settings toggle */
+.mqtt-advanced-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  margin-top: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  border-top: 1px solid var(--border-color);
+  user-select: none;
+}
+
+.mqtt-advanced-toggle:hover {
+  color: var(--text-primary);
+}
+
+.mqtt-advanced-chevron {
+  font-size: 16px;
+  transition: transform 0.2s;
+  display: inline-block;
+}
+
+.mqtt-advanced-chevron.open {
+  transform: rotate(90deg);
+}
+
+.mqtt-advanced-section {
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mqtt-adv-row {
+  display: flex;
+  gap: 12px;
+}
+
+.mqtt-adv-row .form-group {
+  flex: 1;
 }
 
