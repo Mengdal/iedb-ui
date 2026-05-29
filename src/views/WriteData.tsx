@@ -60,28 +60,28 @@ home_actions,room=Living\ Room,action=alert,level=warn description="Carbon monox
     name: 'NOAA Bay Area weather data',
     description: 'Daily weather metrics for Bay Area airports (large dataset).',
     precision: 's',
-    sourceUrl: '/__sample_downloads/bay-area-weather.lp'
+    sourceUrl: 'https://docs.influxdata.com/downloads/bay-area-weather.lp'
   },
   {
     id: 'eu-wind',
     name: 'European Union wind data',
     description: 'Hourly wind speed and direction with location tags.',
     precision: 's',
-    sourceUrl: '/__sample_downloads/eu-wind-data.lp'
+    sourceUrl: 'https://docs.influxdata.com/downloads/eu-wind-data.lp'
   },
   {
     id: 'bitcoin',
     name: 'Bitcoin price data',
     description: 'Historical bitcoin price dataset from CoinDesk samples.',
     precision: 'ns',
-    sourceUrl: '/__sample_downloads/bitcoin.lp'
+    sourceUrl: 'https://docs.influxdata.com/downloads/bitcoin.lp'
   },
   {
     id: 'random-numbers',
     name: 'Random numbers sample data',
     description: 'Two random numeric fields over a fixed time range.',
     precision: 'ns',
-    sourceUrl: '/__sample_downloads/random-numbers.lp'
+    sourceUrl: 'https://docs.influxdata.com/downloads/random-numbers.lp'
   }
 ];
 
@@ -301,7 +301,11 @@ const WriteData: React.FC = () => {
       if (!payload && sample.sourceUrl) {
         let responseText = '';
         try {
-          const r = await fetch(sample.sourceUrl);
+          const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, '');
+          const proxyUrl = `${baseUrl}/api/v1/proxy/fetch?url=${encodeURIComponent(sample.sourceUrl)}`;
+          const r = await fetch(proxyUrl, {
+            headers: { 'Authorization': `Bearer ${activeServer.token}` }
+          });
           if (!r.ok) {
             throw new Error(`Failed to download sample data: ${r.status}`);
           }

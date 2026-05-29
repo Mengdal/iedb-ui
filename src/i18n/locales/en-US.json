@@ -677,7 +677,7 @@
 
       "sampleDatasetsTitle": "Sample datasets",
       "sampleDatasetsDesc": "Quickly import sample data into the selected database.",
-      "remoteSampleWarning": "Remote sample will be fetched via local dev proxy.",
+      "remoteSampleWarning": "Remote sample will be downloaded from the official server.",
       "importSample": "Import Sample",
       "importingSample": "Importing...",
 
@@ -699,7 +699,7 @@
       "importSucceededMessage": "{{mode}} import succeeded for {{database}} / {{measurement}}.",
       "importFailedMessage": "{{mode}} import failed.",
 
-      "browserBlockedDownloadMessage": "Browser blocked the download (CORS). Please use the server-side sample import or upload the file manually.",
+      "browserBlockedDownloadMessage": "Failed to download sample data. Check your network connection or upload the file manually.",
       "failedToImportSampleMessage": "Failed to import sample dataset.",
 
       "networkWriteErrorMessage": "Network error while writing data.",

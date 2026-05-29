@@ -21,3 +21,6 @@ pnpm-debug.log*
 
 .claude/
 .claudecode/
+
+.codegraph/
+.cursor/
