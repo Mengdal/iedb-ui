@@ -1,4 +1,4 @@
-# Grafana 集成
+# Grafana集成
 
 通过 Grafana + IotEdgeDB 数据源插件，你可以直接查询时序数据并构建监控看板。结合标准 SQL 与 Grafana 时间宏，可以快速完成主机、数据库、网络等指标可视化。
 
