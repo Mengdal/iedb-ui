@@ -24,6 +24,7 @@ interface MqttSubscription {
   reconnect_min_seconds?: number;
   reconnect_max_seconds?: number;
   clean_session?: boolean;
+  auto_start?: boolean;
 }
 
 interface TopicMappingEntry {
@@ -195,7 +196,7 @@ const PluginsMqtt: React.FC = () => {
       topicFilter: sub.topics?.join(', ') || '',
       database: sub.database || 'default',
       qos: Number.isFinite(sub.qos) ? String(sub.qos) : '0',
-      autoStart: false,
+      autoStart: sub.auto_start ?? false,
       topicMappings: mappings,
       username: sub.username || '',
       password: sub.password || '',
@@ -206,7 +207,7 @@ const PluginsMqtt: React.FC = () => {
       cleanSession: sub.clean_session ?? false
     });
     setMqttErrorMsg('');
-    setShowAdvanced(!!(sub.username || sub.topic_mapping || sub.clean_session));
+    setShowAdvanced(!!(sub.username || sub.topic_mapping || sub.clean_session || sub.auto_start));
     setIsMqttFormOpen(true);
     setTimeout(() => {
       mqttModalBodyRef.current?.scrollTo({ top: 0 });
@@ -265,10 +266,7 @@ const PluginsMqtt: React.FC = () => {
     payload.reconnect_max_seconds = parseInt(mqttForm.reconnectMax, 10) || 60;
     payload.clean_session = mqttForm.cleanSession;
 
-    // Server accepts `auto_start` on create only.
-    if (!editingMqtt) {
-      payload.auto_start = mqttForm.autoStart;
-    }
+    payload.auto_start = mqttForm.autoStart;
 
     const url = editingMqtt
       ? `/api/v1/mqtt/subscriptions/${editingMqtt.id}`
@@ -302,10 +300,22 @@ const PluginsMqtt: React.FC = () => {
     setMqttActionBusyId(id);
     setMqttErrorMsg('');
     try {
-      await mqttApiFetch(`/api/v1/mqtt/subscriptions/${id}/${action}`, { method: 'POST' });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      try {
+        await mqttApiFetch(`/api/v1/mqtt/subscriptions/${id}/${action}`, {
+          method: 'POST',
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
       await fetchMqttSubscriptions();
     } catch (err: any) {
-      setMqttErrorMsg(err.message || t('views.pluginsMqtt.failedToControl', { action }));
+      const msg = err.name === 'AbortError'
+        ? t('views.pluginsMqtt.requestTimeout', { defaultValue: 'Request timeout (10s)' })
+        : (err.message || t('views.pluginsMqtt.failedToControl', { action }));
+      setMqttErrorMsg(msg);
     } finally {
       setMqttActionBusyId(null);
     }
@@ -432,13 +442,16 @@ const PluginsMqtt: React.FC = () => {
                       </td>
                       <td>
                         <div className="token-actions">
-                          {isRunning ? (
+                          {mqttActionBusyId === sub.id ? (
+                            <button type="button" className="icon-btn" disabled>
+                              <Loader2 size={16} className="spin" />
+                            </button>
+                          ) : isRunning ? (
                             <button
                               type="button"
                               className="icon-btn danger"
                               title={t('views.pluginsMqtt.actionStop')}
                               onClick={() => controlMqttSubscription(sub.id, 'stop')}
-                              disabled={mqttActionBusyId === sub.id}
                             >
                               <StopCircle size={16} />
                             </button>
@@ -448,7 +461,6 @@ const PluginsMqtt: React.FC = () => {
                               className="icon-btn"
                               title={t('views.pluginsMqtt.actionStart')}
                               onClick={() => controlMqttSubscription(sub.id, 'start')}
-                              disabled={mqttActionBusyId === sub.id}
                             >
                               <Play size={16} />
                             </button>
@@ -571,20 +583,6 @@ const PluginsMqtt: React.FC = () => {
                     <option value="2">{t('views.pluginsMqtt.qos2')}</option>
                   </select>
                 </div>
-
-                {!editingMqtt && (
-                  <div className="form-group perm-checkboxes">
-                    <label htmlFor="mqtt-auto-start">
-                      <input
-                        id="mqtt-auto-start"
-                        type="checkbox"
-                        checked={mqttForm.autoStart}
-                        onChange={(e) => setMqttForm({ ...mqttForm, autoStart: e.target.checked })}
-                      />
-                      {t('views.pluginsMqtt.autoStart')}
-                    </label>
-                  </div>
-                )}
 
                 {/* Advanced Settings Toggle */}
                 <div
@@ -730,17 +728,31 @@ const PluginsMqtt: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="form-group perm-checkboxes">
-                      <label htmlFor="mqtt-clean-session">
-                        <input
-                          id="mqtt-clean-session"
-                          type="checkbox"
-                          checked={mqttForm.cleanSession}
-                          onChange={e => setMqttForm({ ...mqttForm, cleanSession: e.target.checked })}
-                        />
-                        {t('views.pluginsMqtt.cleanSession')}
-                        <span className="topic-hint-icon" title={t('views.pluginsMqtt.cleanSessionHint')}>?</span>
-                      </label>
+                    <div style={{ display: 'flex', gap: 24 }}>
+                      <div className="form-group perm-checkboxes">
+                        <label htmlFor="mqtt-auto-start">
+                          <input
+                            id="mqtt-auto-start"
+                            type="checkbox"
+                            checked={mqttForm.autoStart}
+                            onChange={e => setMqttForm({ ...mqttForm, autoStart: e.target.checked })}
+                          />
+                          {t('views.pluginsMqtt.autoStart')}
+                        </label>
+                      </div>
+
+                      <div className="form-group perm-checkboxes">
+                        <label htmlFor="mqtt-clean-session">
+                          <input
+                            id="mqtt-clean-session"
+                            type="checkbox"
+                            checked={mqttForm.cleanSession}
+                            onChange={e => setMqttForm({ ...mqttForm, cleanSession: e.target.checked })}
+                          />
+                          {t('views.pluginsMqtt.cleanSession')}
+                          <span className="topic-hint-icon" title={t('views.pluginsMqtt.cleanSessionHint')}>?</span>
+                        </label>
+                      </div>
                     </div>
                   </div>
                 )}

@@ -79,3 +79,42 @@
   }
 }
 
+/* Hide Docusaurus built-in back-to-top button */
+.theme-back-to-top-button {
+  display: none !important;
+}
+
+/* Scroll to top button (replaces DocsBot button when scrolling) */
+.scroll-to-top-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--ifm-color-primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.3s, transform 0.3s;
+  z-index: 9999;
+  pointer-events: none;
+  font-size: 20px;
+}
+
+.scroll-to-top-btn.visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.scroll-to-top-btn:hover {
+  background: var(--ifm-color-primary-dark);
+}
+
