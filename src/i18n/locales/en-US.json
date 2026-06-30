@@ -94,7 +94,18 @@
         "colMeasurementName": "Name",
         "colFileCount": "Files",
         "colTotalSize": "Size",
-        "colStoragePath": "Path"
+        "colStoragePath": "Path",
+        "colActions": "Actions",
+        "deleteMeasurement": "Delete",
+        "deleteMeasurementTitle": "Delete Measurement",
+        "deleteMeasurementConfirm": "Delete measurement \"{{name}}\"?",
+        "deleteMeasurementWarning": "This action cannot be undone. All data in this measurement will be permanently removed.",
+        "deleteMeasurementPreview": "Preview Impact",
+        "deleteMeasurementPreviewDesc": "Preview of deleting measurement \"{{name}}\". Please confirm before proceeding.",
+        "deleteMeasurementLoading": "Calculating impact...",
+        "deletePreviewRows": "Rows to delete",
+        "deletePreviewFiles": "Affected files",
+        "deleting": "Deleting..."
       }
     },
     "tokens": {
@@ -501,6 +512,10 @@
       "apiKeyLabel": "API Key",
       "apiKeyPlaceholder": "Your API key",
       "apiKeyHelp": "Enter your API key to enable natural language search capabilities.",
+
+      "modelNameLabel": "Model Name",
+      "modelNamePlaceholder": "e.g. gpt-4, deepseek-chat, qwen-max",
+      "modelNameHelp": "Specify the model ID to use for AI queries. Update this when your provider releases new models.",
 
       "customInstructionsLabel": "Custom Database Instructions",
       "customInstructionsSummaryEmpty": "No custom instructions configured",

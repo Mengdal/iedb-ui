@@ -95,7 +95,18 @@
         "colMeasurementName": "名称",
         "colFileCount": "文件数",
         "colTotalSize": "大小",
-        "colStoragePath": "路径"
+        "colStoragePath": "路径",
+        "colActions": "操作",
+        "deleteMeasurement": "删除",
+        "deleteMeasurementTitle": "删除测量表",
+        "deleteMeasurementConfirm": "确定要删除测量表 \"{{name}}\" 吗？",
+        "deleteMeasurementWarning": "此操作不可撤销，该测量表的所有数据将被永久删除。",
+        "deleteMeasurementPreview": "预览影响范围",
+        "deleteMeasurementPreviewDesc": "以下是删除测量表 \"{{name}}\" 的影响预览，请确认后再执行。",
+        "deleteMeasurementLoading": "正在计算影响范围...",
+        "deletePreviewRows": "将删除行数",
+        "deletePreviewFiles": "涉及文件数",
+        "deleting": "删除中..."
       }
     },
     "tokens": {
@@ -497,6 +508,11 @@
       "apiKeyLabel": "API Key",
       "apiKeyPlaceholder": "你的 API Key",
       "apiKeyHelp": "输入你的 API Key 以启用自然语言搜索能力。",
+
+      "modelNameLabel": "模型名称",
+      "modelNamePlaceholder": "例如：gpt-4、deepseek-chat、qwen-max",
+      "modelNameHelp": "指定用于 AI 查询的模型 ID。当提供商发布新模型时，可在此更新。",
+
       "customInstructionsLabel": "自定义数据库指令",
       "customInstructionsSummaryEmpty": "未配置自定义指令",
       "customInstructionsSummaryWithCount": "已配置自定义指令（{{count}} 个字符）",

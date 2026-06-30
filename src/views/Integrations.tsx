@@ -19,21 +19,22 @@ type AIProviderId =
 const AI_PROVIDERS: Array<{
   id: AIProviderId;
   defaultBaseUrl: string;
+  defaultModel: string;
   requiresApiKey: boolean;
 }> = [
-  { id: 'custom', defaultBaseUrl: '', requiresApiKey: false },
-  { id: 'lmstudio', defaultBaseUrl: 'http://localhost:1234/v1', requiresApiKey: false },
-  { id: 'openai', defaultBaseUrl: 'https://api.openai.com/v1', requiresApiKey: true },
+  { id: 'custom', defaultBaseUrl: '', defaultModel: '', requiresApiKey: false },
+  { id: 'lmstudio', defaultBaseUrl: 'http://localhost:1234/v1', defaultModel: 'local-model', requiresApiKey: false },
+  { id: 'openai', defaultBaseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-3.5-turbo', requiresApiKey: true },
 
   // China-friendly / domestic vendors (OpenAI-compatible where possible)
-  { id: 'qwen', defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', requiresApiKey: true },
-  { id: 'deepseek', defaultBaseUrl: 'https://api.deepseek.com/v1', requiresApiKey: true },
-  { id: 'zhipu', defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4', requiresApiKey: true },
-  { id: 'moonshot', defaultBaseUrl: 'https://api.moonshot.cn/v1', requiresApiKey: true },
-  { id: 'doubao', defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3', requiresApiKey: true },
-  { id: 'tencent-hunyuan', defaultBaseUrl: 'https://api.hunyuan.cloud.tencent.com/v1', requiresApiKey: true },
-  { id: 'baidu-qianfan', defaultBaseUrl: 'https://qianfan.baidubce.com/v2', requiresApiKey: true },
-  { id: 'iflytek-spark', defaultBaseUrl: 'https://spark-api-open.xf-yun.com/v1', requiresApiKey: true },
+  { id: 'qwen', defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen-max', requiresApiKey: true },
+  { id: 'deepseek', defaultBaseUrl: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat', requiresApiKey: true },
+  { id: 'zhipu', defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4', defaultModel: 'glm-4', requiresApiKey: true },
+  { id: 'moonshot', defaultBaseUrl: 'https://api.moonshot.cn/v1', defaultModel: 'moonshot-v1-8k', requiresApiKey: true },
+  { id: 'doubao', defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3', defaultModel: 'doubao-lite-4k', requiresApiKey: true },
+  { id: 'tencent-hunyuan', defaultBaseUrl: 'https://api.hunyuan.cloud.tencent.com/v1', defaultModel: 'hunyuan-lite', requiresApiKey: true },
+  { id: 'baidu-qianfan', defaultBaseUrl: 'https://qianfan.baidubce.com/v2', defaultModel: 'ernie-4.0', requiresApiKey: true },
+  { id: 'iflytek-spark', defaultBaseUrl: 'https://spark-api-open.xf-yun.com/v1', defaultModel: 'spark-4.0', requiresApiKey: true },
 ];
 
 function providerConfig(id: string) {
@@ -53,6 +54,7 @@ const Integrations: React.FC = () => {
   const [provider, setProvider] = useState(() => localStorage.getItem('iotedge-ai-provider') || 'lmstudio');
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('iotedge-ai-apikey') || '');
   const [baseUrl, setBaseUrl] = useState(() => localStorage.getItem('iotedge-ai-baseurl') || 'http://localhost:1234/v1');
+  const [modelName, setModelName] = useState(() => localStorage.getItem('iotedge-ai-model') || providerConfig(provider).defaultModel);
   const [instructions, setInstructions] = useState(() => localStorage.getItem('iotedge-ai-instructions') || '');
   const [isInstructionsExpanded, setIsInstructionsExpanded] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
@@ -70,9 +72,11 @@ const Integrations: React.FC = () => {
   const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newProvider = e.target.value;
     setProvider(newProvider);
+    const cfg = providerConfig(newProvider);
     if (newProvider !== 'custom') {
-      setBaseUrl(providerConfig(newProvider).defaultBaseUrl);
+      setBaseUrl(cfg.defaultBaseUrl);
     }
+    setModelName(cfg.defaultModel);
   };
 
   const handleOpenModal = () => {
@@ -118,6 +122,7 @@ const Integrations: React.FC = () => {
     localStorage.setItem('iotedge-ai-provider', provider);
     localStorage.setItem('iotedge-ai-apikey', apiKey);
     localStorage.setItem('iotedge-ai-baseurl', baseUrl);
+    localStorage.setItem('iotedge-ai-model', modelName);
     localStorage.setItem('iotedge-ai-instructions', instructions);
     setSaveStatus(t('views.integrations.saveStatusSaved'));
     setTimeout(() => setSaveStatus(''), 2000);
@@ -186,6 +191,18 @@ const Integrations: React.FC = () => {
                 </button>
               </div>
               <span className="help-text">{t('views.integrations.apiKeyHelp')}</span>
+            </div>
+
+            <div className="form-group">
+              <label>{t('views.integrations.modelNameLabel')}</label>
+              <input
+                type="text"
+                placeholder={t('views.integrations.modelNamePlaceholder')}
+                value={modelName}
+                onChange={(e) => setModelName(e.target.value)}
+                className="integration-input"
+              />
+              <span className="help-text">{t('views.integrations.modelNameHelp')}</span>
             </div>
 
             <div className="form-group">

@@ -802,16 +802,18 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
       userPrompt += `Schema:\n${JSON.stringify(schemaSnapshot, null, 2)}\n\n`;
       userPrompt += `Question: ${nlQuery}\n\nNow output one SELECT SQL only.`;
 
-      let modelId = 'local-model';
-      if (provider === 'openai') modelId = 'gpt-3.5-turbo';
-      else if (provider === 'qwen') modelId = 'qwen-max';
-      else if (provider === 'deepseek') modelId = 'deepseek-chat';
-      else if (provider === 'zhipu') modelId = 'glm-4';
-      else if (provider === 'moonshot') modelId = 'moonshot-v1-8k';
-      else if (provider === 'doubao') modelId = 'doubao-lite-4k';
-      else if (provider === 'tencent-hunyuan') modelId = 'hunyuan-lite';
-      else if (provider === 'baidu-qianfan') modelId = 'ernie-4.0';
-      else if (provider === 'iflytek-spark') modelId = 'spark-4.0';
+      let modelId = localStorage.getItem('iotedge-ai-model') || 'local-model';
+      if (!localStorage.getItem('iotedge-ai-model')) {
+        if (provider === 'openai') modelId = 'gpt-3.5-turbo';
+        else if (provider === 'qwen') modelId = 'qwen-max';
+        else if (provider === 'deepseek') modelId = 'deepseek-chat';
+        else if (provider === 'zhipu') modelId = 'glm-4';
+        else if (provider === 'moonshot') modelId = 'moonshot-v1-8k';
+        else if (provider === 'doubao') modelId = 'doubao-lite-4k';
+        else if (provider === 'tencent-hunyuan') modelId = 'hunyuan-lite';
+        else if (provider === 'baidu-qianfan') modelId = 'ernie-4.0';
+        else if (provider === 'iflytek-spark') modelId = 'spark-4.0';
+      }
 
       const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
