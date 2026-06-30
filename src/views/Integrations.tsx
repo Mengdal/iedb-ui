@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { BrainCircuit, Settings2, Eye, EyeOff, FileText, X, Upload, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useRef, useState, useEffect } from 'react';
+import { BrainCircuit, Settings2, Eye, EyeOff, FileText, X, Upload, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import './Integrations.css';
 
@@ -24,17 +24,17 @@ const AI_PROVIDERS: Array<{
 }> = [
   { id: 'custom', defaultBaseUrl: '', defaultModel: '', requiresApiKey: false },
   { id: 'lmstudio', defaultBaseUrl: 'http://localhost:1234/v1', defaultModel: 'local-model', requiresApiKey: false },
-  { id: 'openai', defaultBaseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-3.5-turbo', requiresApiKey: true },
+  { id: 'openai', defaultBaseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-5.5', requiresApiKey: true },
 
   // China-friendly / domestic vendors (OpenAI-compatible where possible)
-  { id: 'qwen', defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen-max', requiresApiKey: true },
-  { id: 'deepseek', defaultBaseUrl: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat', requiresApiKey: true },
-  { id: 'zhipu', defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4', defaultModel: 'glm-4', requiresApiKey: true },
-  { id: 'moonshot', defaultBaseUrl: 'https://api.moonshot.cn/v1', defaultModel: 'moonshot-v1-8k', requiresApiKey: true },
-  { id: 'doubao', defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3', defaultModel: 'doubao-lite-4k', requiresApiKey: true },
-  { id: 'tencent-hunyuan', defaultBaseUrl: 'https://api.hunyuan.cloud.tencent.com/v1', defaultModel: 'hunyuan-lite', requiresApiKey: true },
+  { id: 'qwen', defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen3.7-max', requiresApiKey: true },
+  { id: 'deepseek', defaultBaseUrl: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-v4-flash', requiresApiKey: true },
+  { id: 'zhipu', defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4', defaultModel: 'glm-5.2', requiresApiKey: true },
+  { id: 'moonshot', defaultBaseUrl: 'https://api.moonshot.cn/v1', defaultModel: 'kimi-k2.7-code', requiresApiKey: true },
+  { id: 'doubao', defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3', defaultModel: 'doubao-pro-32k', requiresApiKey: true },
+  { id: 'tencent-hunyuan', defaultBaseUrl: 'https://api.hunyuan.cloud.tencent.com/v1', defaultModel: 'hunyuan-turbos-latest', requiresApiKey: true },
   { id: 'baidu-qianfan', defaultBaseUrl: 'https://qianfan.baidubce.com/v2', defaultModel: 'ernie-4.0', requiresApiKey: true },
-  { id: 'iflytek-spark', defaultBaseUrl: 'https://spark-api-open.xf-yun.com/v1', defaultModel: 'spark-4.0', requiresApiKey: true },
+  { id: 'iflytek-spark', defaultBaseUrl: 'https://spark-api-open.xf-yun.com/v1', defaultModel: '4.0Ultra', requiresApiKey: true },
 ];
 
 function providerConfig(id: string) {
@@ -55,6 +55,12 @@ const Integrations: React.FC = () => {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('iotedge-ai-apikey') || '');
   const [baseUrl, setBaseUrl] = useState(() => localStorage.getItem('iotedge-ai-baseurl') || 'http://localhost:1234/v1');
   const [modelName, setModelName] = useState(() => localStorage.getItem('iotedge-ai-model') || providerConfig(provider).defaultModel);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [hasFetchedModels, setHasFetchedModels] = useState(false);
+  const [fetchModelsError, setFetchModelsError] = useState('');
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
   const [instructions, setInstructions] = useState(() => localStorage.getItem('iotedge-ai-instructions') || '');
   const [isInstructionsExpanded, setIsInstructionsExpanded] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
@@ -77,6 +83,88 @@ const Integrations: React.FC = () => {
       setBaseUrl(cfg.defaultBaseUrl);
     }
     setModelName(cfg.defaultModel);
+    setAvailableModels([]);
+    setHasFetchedModels(false);
+    setFetchModelsError('');
+    setShowModelDropdown(false);
+  };
+
+  const handleFetchModels = async () => {
+    if (!baseUrl) {
+      setFetchModelsError(t('views.integrations.fetchModelsErrorNoUrl'));
+      return;
+    }
+    setFetchingModels(true);
+    setFetchModelsError('');
+    setAvailableModels([]);
+    try {
+      const res = await fetch(`${baseUrl.replace(/\/$/, '')}/models`, {
+        headers: apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}
+      });
+      if (!res.ok) {
+        const statusMap: Record<number, string> = {
+          401: t('views.integrations.fetchModelsError401'),
+          403: t('views.integrations.fetchModelsError403'),
+          404: t('views.integrations.fetchModelsError404'),
+          408: t('views.integrations.fetchModelsError408'),
+          429: t('views.integrations.fetchModelsError429'),
+        };
+        throw new Error(statusMap[res.status] || t('views.integrations.fetchModelsErrorHttp', { status: res.status }));
+      }
+      const data = await res.json();
+      const models: string[] = (data.data || [])
+        .map((m: { id: string }) => m.id)
+        .filter(Boolean)
+        .sort();
+      if (models.length === 0) {
+        throw new Error(t('views.integrations.fetchModelsEmpty'));
+      }
+      setAvailableModels(models);
+      setHasFetchedModels(true);
+      if (models.length > 0) setShowModelDropdown(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS')) {
+        setFetchModelsError(t('views.integrations.fetchModelsErrorNetwork'));
+      } else {
+        setFetchModelsError(msg);
+      }
+    } finally {
+      setFetchingModels(false);
+    }
+  };
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
+        setShowModelDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleModelFocus = () => {
+    if (!hasFetchedModels) {
+      if (!fetchingModels) handleFetchModels();
+    } else {
+      setShowModelDropdown(true);
+    }
+  };
+
+  const handleModelInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setModelName(e.target.value);
+    setShowModelDropdown(true);
+  };
+
+  const handleChevronMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (fetchingModels) return;
+    if (!hasFetchedModels) {
+      handleFetchModels();
+    } else {
+      setShowModelDropdown(!showModelDropdown);
+    }
   };
 
   const handleOpenModal = () => {
@@ -195,13 +283,67 @@ const Integrations: React.FC = () => {
 
             <div className="form-group">
               <label>{t('views.integrations.modelNameLabel')}</label>
-              <input
-                type="text"
-                placeholder={t('views.integrations.modelNamePlaceholder')}
-                value={modelName}
-                onChange={(e) => setModelName(e.target.value)}
-                className="integration-input"
-              />
+              <div className="model-combobox" ref={modelDropdownRef}>
+                <div className="model-combobox-input-wrap">
+                  <input
+                    type="text"
+                    placeholder={t('views.integrations.modelNamePlaceholder')}
+                    value={modelName}
+                    onChange={handleModelInputChange}
+                    onFocus={handleModelFocus}
+                    className="integration-input model-combobox-input"
+                  />
+                  {fetchingModels ? (
+                    <RefreshCw size={14} className="spinning model-combobox-icon" />
+                  ) : (
+                    <>
+                      {modelName && (
+                        <X
+                          size={14}
+                          className="model-combobox-icon model-combobox-clear"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setModelName('');
+                            setShowModelDropdown(true);
+                          }}
+                        />
+                      )}
+                      <ChevronDown
+                        size={14}
+                        className="model-combobox-icon model-combobox-chevron"
+                        onMouseDown={handleChevronMouseDown}
+                      />
+                    </>
+                  )}
+                </div>
+                {showModelDropdown && (() => {
+                  const combined = new Set<string>();
+                  if (modelName) combined.add(modelName);
+                  availableModels.forEach((m) => combined.add(m));
+                  const query = modelName.toLowerCase();
+                  const filtered = Array.from(combined)
+                    .filter((m) => m.toLowerCase().includes(query))
+                    .sort();
+                  if (filtered.length === 0) return null;
+                  return (
+                    <ul className="model-dropdown">
+                      {filtered.map((m) => (
+                        <li
+                          key={m}
+                          className={`model-dropdown-item${m === modelName ? ' selected' : ''}`}
+                          onClick={() => { setModelName(m); setShowModelDropdown(false); }}
+                        >
+                          {m}
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
+              </div>
+              {fetchModelsError && (
+                <span className="help-text" style={{ color: '#ff6e6e' }}>{fetchModelsError}</span>
+              )}
               <span className="help-text">{t('views.integrations.modelNameHelp')}</span>
             </div>
 

@@ -804,15 +804,15 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
 
       let modelId = localStorage.getItem('iotedge-ai-model') || 'local-model';
       if (!localStorage.getItem('iotedge-ai-model')) {
-        if (provider === 'openai') modelId = 'gpt-3.5-turbo';
-        else if (provider === 'qwen') modelId = 'qwen-max';
-        else if (provider === 'deepseek') modelId = 'deepseek-chat';
-        else if (provider === 'zhipu') modelId = 'glm-4';
-        else if (provider === 'moonshot') modelId = 'moonshot-v1-8k';
-        else if (provider === 'doubao') modelId = 'doubao-lite-4k';
-        else if (provider === 'tencent-hunyuan') modelId = 'hunyuan-lite';
+        if (provider === 'openai') modelId = 'gpt-5.5';
+        else if (provider === 'qwen') modelId = 'qwen3.7-max';
+        else if (provider === 'deepseek') modelId = 'deepseek-v4-flash';
+        else if (provider === 'zhipu') modelId = 'glm-5.2';
+        else if (provider === 'moonshot') modelId = 'kimi-k2.7-code';
+        else if (provider === 'doubao') modelId = 'doubao-pro-32k';
+        else if (provider === 'tencent-hunyuan') modelId = 'hunyuan-turbos-latest';
         else if (provider === 'baidu-qianfan') modelId = 'ernie-4.0';
-        else if (provider === 'iflytek-spark') modelId = 'spark-4.0';
+        else if (provider === 'iflytek-spark') modelId = '4.0Ultra';
       }
 
       const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
