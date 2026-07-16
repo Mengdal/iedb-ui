@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Activity,
   AlertCircle,
@@ -42,7 +42,11 @@ import {
 } from 'lucide-react';
 import { useServers } from '../contexts/ServerContext';
 import { useTranslation } from 'react-i18next';
+import { useApiFetch } from '../hooks/useApiFetch';
+import { usePolling } from '../hooks/usePolling';
+import { formatTime } from '../utils/formatTime';
 import TimeseriesCharts from './TimeseriesCharts';
+import ApplicationLogs from './ApplicationLogs';
 import './SystemOverview.css';
 
 interface Metrics {
@@ -117,41 +121,27 @@ const CollapsibleSection: React.FC<{ title: string; children: React.ReactNode }>
 
 const SystemOverview: React.FC = () => {
   const { activeServer } = useServers();
+  const { apiFetch } = useApiFetch({ handleLicense: false, handleFeature: false });
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { t, i18n } = useTranslation();
 
-  const fetchMetrics = async () => {
+  const fetchMetrics = React.useCallback(async () => {
     if (!activeServer) return;
     setLoading(true);
     setError(null);
     try {
-      // Avoid trailing slash issues
-      const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, "");
-      const res = await fetch(`${baseUrl}/api/v1/metrics`, {
-        headers: {
-          'Authorization': `Bearer ${activeServer.token}`
-        }
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP Error: ${res.status}`);
-      }
-      const data = await res.json();
-      setMetrics(data);
+      const data = await apiFetch('/api/v1/metrics');
+      setMetrics(data as Metrics);
     } catch (err: any) {
       setError(err.message || t('views.systemOverview.errorFailedToFetch'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeServer, apiFetch, t]);
 
-  useEffect(() => {
-    fetchMetrics();
-    // Auto refresh every 10 seconds
-    const intervalId = setInterval(fetchMetrics, 10000);
-    return () => clearInterval(intervalId);
-  }, [activeServer]);
+  usePolling(fetchMetrics, 10000, { enabled: !!activeServer });
 
   if (!activeServer) {
     return (
@@ -189,7 +179,7 @@ const SystemOverview: React.FC = () => {
         <div className="stats-grid">
 
           {/* Top-Level Highlights */}
-          <div className="cards-wrapper" style={{ marginBottom: '8px' }}>
+          <div className="cards-wrapper">
             <StatCard 
               title="HTTP Requests" 
               value={(metrics.http_requests_total || 0).toLocaleString(i18n.language)} 
@@ -218,11 +208,13 @@ const SystemOverview: React.FC = () => {
           
           <TimeseriesCharts />
 
-          <div className="advanced-metrics-container" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
+          <ApplicationLogs />
+
+          <div className="advanced-metrics-container" style={{ paddingTop: 0, borderTop: 'none' }}>
             {/* 1. 基础系统与环境 */}
             <CollapsibleSection title="1. System & Environment">
               <StatCard title="Go Version" value={metrics.go_version || 'N/A'} icon={<Server size={18} />} />
-              <StatCard title="Uptime" value={metrics.uptime_seconds ? formatUptime(metrics.uptime_seconds) : '0s'} icon={<Clock size={18} />} subtitle={`Since ${metrics.timestamp ? new Date(metrics.timestamp).toLocaleTimeString(i18n.language) : 'N/A'}`} />
+              <StatCard title="Uptime" value={metrics.uptime_seconds ? formatUptime(metrics.uptime_seconds) : '0s'} icon={<Clock size={18} />} subtitle={`Since ${metrics.timestamp ? formatTime(metrics.timestamp, i18n.language) : 'N/A'}`} />
               <StatCard title="CPU Cores" value={metrics.num_cpu || 0} icon={<Cpu size={18} />} subtitle={`${metrics.gomaxprocs || 0} GOMAXPROCS`} />
               <StatCard title="Goroutines" value={(metrics.goroutines || 0).toLocaleString(i18n.language)} icon={<Activity size={18} />} />
             </CollapsibleSection>

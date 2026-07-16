@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Database, Plus, RefreshCw, Trash2, X, Server, Loader2, ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useServers } from '../contexts/ServerContext';
-import { serverBaseUrl } from '../utils/server';
+import { useApiFetch } from '../hooks/useApiFetch';
 import ConfirmModal from '../components/ConfirmModal';
 import DatabaseRetentionPolicies from './DatabaseRetentionPolicies';
 import DatabaseMeasurements from './DatabaseMeasurements';
@@ -16,6 +16,7 @@ interface DatabaseItem {
 function Databases() {
   const { t } = useTranslation();
   const { activeServer } = useServers();
+  const { apiFetch } = useApiFetch({ handleLicense: false, handleFeature: false });
 
   const [databases, setDatabases] = useState<DatabaseItem[]>([]);
   const [policyCountMap, setPolicyCountMap] = useState<Record<string, number>>({});
@@ -36,26 +37,17 @@ function Databases() {
   const [dbMeasurements, setDbMeasurements] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const baseUrl = useMemo(() => {
-    if (!activeServer) return '';
-    return serverBaseUrl(activeServer.protocol, activeServer.host);
-  }, [activeServer]);
-
   const fetchDatabases = async () => {
     if (!activeServer) return;
     setIsLoading(true);
     try {
-      const headers = { 'Authorization': `Bearer ${activeServer.token}` };
-      const [dbRes, rpRes] = await Promise.all([
-        fetch(`${baseUrl}/api/v1/databases`, { headers }),
-        fetch(`${baseUrl}/api/v1/retention`, { headers }),
+      const [dbData, rpData] = await Promise.all([
+        apiFetch('/api/v1/databases'),
+        apiFetch('/api/v1/retention').catch(() => null),
       ]);
-      if (!dbRes.ok) throw new Error(`Failed: ${dbRes.status}`);
-      const dbData = await dbRes.json();
-      setDatabases(dbData.databases || []);
+      setDatabases((dbData as any).databases || []);
 
-      if (rpRes.ok) {
-        const rpData = await rpRes.json();
+      if (rpData) {
         const policies = Array.isArray(rpData) ? rpData : [];
         const map: Record<string, number> = {};
         policies.forEach((p: any) => { map[p.database] = (map[p.database] || 0) + 1; });
@@ -70,48 +62,32 @@ function Databases() {
 
   useEffect(() => {
     fetchDatabases();
-  }, [activeServer]);
+  }, [activeServer, apiFetch]);
 
   // Fetch measurements when entering detail view
   useEffect(() => {
     if (!selectedDb || !activeServer) { setDbMeasurements([]); return; }
     const ctrl = new AbortController();
-    fetch(`${baseUrl}/api/v1/databases/${encodeURIComponent(selectedDb)}/measurements`, {
-      headers: { 'Authorization': `Bearer ${activeServer.token}` },
-      signal: ctrl.signal,
-    })
-      .then(res => {
-        if (!res.ok) throw new Error(`Failed: ${res.status}`);
-        return res.json();
-      })
-      .then(data => setDbMeasurements((data.measurements || []).map((m: any) => m.name)))
+    apiFetch(`/api/v1/databases/${encodeURIComponent(selectedDb)}/measurements`, { signal: ctrl.signal })
+      .then(data => setDbMeasurements((data as any).measurements?.map((m: any) => m.name) || []))
       .catch(() => {});
     return () => ctrl.abort();
-  }, [selectedDb, activeServer]);
+  }, [selectedDb, activeServer, apiFetch]);
 
   const handleCreateDatabase = async () => {
     if (!activeServer || !newDbName.trim()) return;
     setIsCreating(true);
     setErrorMsg('');
     try {
-      const res = await fetch(`${baseUrl}/api/v1/databases`, {
+      await apiFetch('/api/v1/databases', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${activeServer.token}`,
-        },
         body: JSON.stringify({ name: newDbName.trim() }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setErrorMsg(data.error || t('views.databases.createFailed'));
-        return;
-      }
       setShowCreateModal(false);
       setNewDbName('');
       fetchDatabases();
-    } catch {
-      setErrorMsg(t('views.databases.createFailed'));
+    } catch (err: any) {
+      setErrorMsg(err.message || t('views.databases.createFailed'));
     } finally {
       setIsCreating(false);
     }
@@ -120,14 +96,7 @@ function Databases() {
   const handleDeleteDatabase = async () => {
     if (!activeServer || !deleteTarget) return;
     setErrorMsg('');
-    const res = await fetch(`${baseUrl}/api/v1/databases/${encodeURIComponent(deleteTarget)}?confirm=true`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${activeServer.token}` },
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || t('views.databases.deleteFailed'));
-    }
+    await apiFetch(`/api/v1/databases/${encodeURIComponent(deleteTarget)}?confirm=true`, { method: 'DELETE' });
     setDeleteTarget(null);
     fetchDatabases();
   };

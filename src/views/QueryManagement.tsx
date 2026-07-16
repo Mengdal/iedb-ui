@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw, Loader2, ShieldAlert, XCircle, Plus, Pencil, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApiFetch } from '../hooks/useApiFetch';
+import { usePolling } from '../hooks/usePolling';
 import { formatTime } from '../utils/formatTime';
 import Pagination from '../components/Pagination';
 import ConfirmModal from '../components/ConfirmModal';
@@ -65,7 +66,7 @@ const AUTO_REFRESH_MS = 5000;
 
 const QueryManagement: React.FC = () => {
   const { t, i18n } = useTranslation();
-  const { apiFetch, baseUrl, activeServer, noLicense, featureNotEnabled, resetGate } = useApiFetch();
+  const { apiFetch, activeServer, noLicense, featureNotEnabled, resetGate } = useApiFetch();
 
   const [tab, setTab] = useState<Tab>('active');
   const [activeQueries, setActiveQueries] = useState<QueryEntry[]>([]);
@@ -90,11 +91,12 @@ const QueryManagement: React.FC = () => {
   const [deleteQueryId, setDeleteQueryId] = useState<string | null>(null);
   const [deletePolicy, setDeletePolicy] = useState<GovernancePolicy | null>(null);
 
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const fetchActive = useCallback(async () => {
     if (!activeServer) return;
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
     try {
       const resp = await apiFetch('/api/v1/queries/active', { signal: abortRef.current?.signal });
       if (resp) {
@@ -104,7 +106,7 @@ const QueryManagement: React.FC = () => {
     } catch {
       // silently ignore
     }
-  }, [activeServer, baseUrl]);
+  }, [activeServer, apiFetch]);
 
   const fetchHistory = useCallback(async () => {
     if (!activeServer) return;
@@ -113,7 +115,7 @@ const QueryManagement: React.FC = () => {
     try {
       const resp = await apiFetch('/api/v1/queries/history?limit=1000');
       if (resp) {
-        const data = resp.queries ?? resp.data ?? [];
+        const data = (resp as any).queries ?? (resp as any).data ?? [];
         setHistoryQueries(Array.isArray(data) ? data : []);
       }
     } catch (err: any) {
@@ -121,7 +123,7 @@ const QueryManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeServer, baseUrl, t]);
+  }, [activeServer, apiFetch, t]);
 
   const fetchPolicies = useCallback(async () => {
     if (!activeServer) return;
@@ -129,37 +131,29 @@ const QueryManagement: React.FC = () => {
     setErrorMsg('');
     setGovNotAvailable(false);
     try {
-      const res = await fetch(`${baseUrl}/api/v1/governance/policies`, {
-        headers: { 'Authorization': `Bearer ${activeServer.token}` },
-      });
-      if (res.status === 403 || res.status === 404 || res.status === 503) {
+      const data = await apiFetch('/api/v1/governance/policies');
+      if (data === null) {
         setGovNotAvailable(true);
         setPolicies([]);
         return;
       }
-      if (!res.ok) throw new Error(`${res.status}`);
-      const data = await res.json();
-      setPolicies(Array.isArray(data.policies) ? data.policies : []);
+      setPolicies(Array.isArray((data as any).policies) ? (data as any).policies : []);
     } catch (err: any) {
       setErrorMsg(err.message || t('views.queryManagement.failedToLoad'));
     } finally {
       setLoading(false);
     }
-  }, [activeServer, baseUrl, t]);
+  }, [activeServer, apiFetch, t]);
 
   const fetchTokens = useCallback(async () => {
     if (!activeServer) return;
     try {
-      const res = await fetch(`${baseUrl}/api/v1/auth/tokens`, {
-        headers: { 'Authorization': `Bearer ${activeServer.token}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setTokens(Array.isArray(data.tokens) ? data.tokens : (Array.isArray(data) ? data : []));
+      const data = await apiFetch('/api/v1/auth/tokens');
+      setTokens(Array.isArray((data as any).tokens) ? (data as any).tokens : (Array.isArray(data) ? data : []));
     } catch {
       // ignore
     }
-  }, [activeServer, baseUrl]);
+  }, [activeServer, apiFetch]);
 
   const fetchCurrent = useCallback(async () => {
     if (!activeServer) {
@@ -191,23 +185,18 @@ const QueryManagement: React.FC = () => {
   }, [tab]);
 
   // Auto-refresh for active tab with AbortController
+  usePolling(fetchActive, AUTO_REFRESH_MS, {
+    enabled: tab === 'active' && !!activeServer && !noLicense && !featureNotEnabled,
+    immediate: false,
+  });
+
+  // Cleanup abort controller on unmount
   useEffect(() => {
-    if (tab === 'active' && activeServer && !noLicense && !featureNotEnabled) {
-      timerRef.current = setInterval(() => {
-        abortRef.current?.abort();
-        abortRef.current = new AbortController();
-        fetchActive();
-      }, AUTO_REFRESH_MS);
-    }
     return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
       abortRef.current?.abort();
       abortRef.current = null;
     };
-  }, [tab, activeServer, noLicense, featureNotEnabled, fetchActive]);
+  }, []);
 
   const cancelQuery = async (id: string) => {
     setCancelingId(id);
@@ -244,36 +233,19 @@ const QueryManagement: React.FC = () => {
     setShowPolicyModal(true);
   };
 
-  const govFetch = async (path: string, init?: RequestInit) => {
-    if (!activeServer) throw new Error('No active server');
-    const res = await fetch(`${baseUrl}${path}`, {
-      ...init,
-      headers: {
-        'Authorization': `Bearer ${activeServer.token}`,
-        ...(init?.headers || {}),
-      },
-    });
-    if (res.status === 204) return null;
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.error || body.message || `Request failed: ${res.status}`);
-    }
-    return res.json();
-  };
-
   const handleSavePolicy = async () => {
     if (!activeServer || !policyForm.token_id) return;
     setSavingPolicy(true);
     setPolicyError('');
     try {
       if (editingPolicy) {
-        await govFetch(`/api/v1/governance/policies/${editingPolicy.id}`, {
+        await apiFetch(`/api/v1/governance/policies/${editingPolicy.token_id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(policyForm),
         });
       } else {
-        await govFetch('/api/v1/governance/policies', {
+        await apiFetch('/api/v1/governance/policies', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(policyForm),
@@ -291,7 +263,7 @@ const QueryManagement: React.FC = () => {
   const handleDeletePolicy = async (p: GovernancePolicy) => {
     if (!activeServer) return;
     try {
-      await govFetch(`/api/v1/governance/policies/${p.id}`, { method: 'DELETE' });
+      await apiFetch(`/api/v1/governance/policies/${p.token_id}`, { method: 'DELETE' });
       await fetchPolicies();
     } catch (err: any) {
       setErrorMsg(err.message || t('views.queryManagement.failedToLoad'));

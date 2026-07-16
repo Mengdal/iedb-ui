@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useServers } from '../contexts/ServerContext';
+import { useApiFetch } from '../hooks/useApiFetch';
 import './Tokens.css';
 
 interface Measurement {
@@ -36,6 +37,7 @@ const PAGE_SIZE = 10;
 const DatabaseMeasurements: React.FC<Props> = ({ database }) => {
   const { t } = useTranslation();
   const { activeServer } = useServers();
+  const { apiFetch } = useApiFetch({ handleLicense: false, handleFeature: false });
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -52,17 +54,13 @@ const DatabaseMeasurements: React.FC<Props> = ({ database }) => {
   useEffect(() => {
     if (!activeServer || !database) return;
     let ignore = false;
-    const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, '');
     setLoading(true);
-    fetch(`${baseUrl}/api/v1/measurements?database=${encodeURIComponent(database)}`, {
-      headers: { 'Authorization': `Bearer ${activeServer.token}` },
-    })
-      .then(res => { if (!res.ok) throw new Error(`${res.status}`); return res.json(); })
-      .then(data => { if (!ignore) setMeasurements(data.measurements || []); })
+    apiFetch(`/api/v1/measurements?database=${encodeURIComponent(database)}`)
+      .then(data => { if (!ignore) setMeasurements((data as any).measurements || []); })
       .catch(() => {})
       .finally(() => { if (!ignore) setLoading(false); });
     return () => { ignore = true; };
-  }, [activeServer, database, refreshKey]);
+  }, [activeServer, database, refreshKey, apiFetch]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return measurements;
@@ -79,20 +77,13 @@ const DatabaseMeasurements: React.FC<Props> = ({ database }) => {
 
   const runDryRun = async () => {
     if (!activeServer) return;
-    const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, '');
     setDeleteState(s => ({ ...s, step: 'deleting', error: null }));
     try {
-      const res = await fetch(`${baseUrl}/api/v1/delete`, {
+      const data = await apiFetch('/api/v1/delete', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${activeServer.token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ database, measurement: deleteState.measurement, where: '1=1', dry_run: true, confirm: true }),
       });
-      if (!res.ok) throw new Error(`${res.status}`);
-      const data: DryRunResult = await res.json();
-      setDeleteState(s => ({ ...s, step: 'preview', dryRunResult: data, error: null }));
+      setDeleteState(s => ({ ...s, step: 'preview', dryRunResult: data as DryRunResult, error: null }));
     } catch (e) {
       setDeleteState(s => ({ ...s, step: 'confirming', error: e instanceof Error ? e.message : t('views.databases.deleteFailed') }));
     }
@@ -100,18 +91,12 @@ const DatabaseMeasurements: React.FC<Props> = ({ database }) => {
 
   const confirmDelete = async () => {
     if (!activeServer) return;
-    const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, '');
     setDeleteState(s => ({ ...s, step: 'deleting', error: null }));
     try {
-      const res = await fetch(`${baseUrl}/api/v1/delete`, {
+      await apiFetch('/api/v1/delete', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${activeServer.token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ database, measurement: deleteState.measurement, where: '1=1', confirm: true }),
       });
-      if (!res.ok) throw new Error(`${res.status}`);
       setDeleteState({ step: 'idle', measurement: '', dryRunResult: null, error: null });
       setRefreshKey(k => k + 1);
     } catch (e) {

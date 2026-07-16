@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Plus, RefreshCw, Play, Pencil, Trash2, X, AlertTriangle, Loader2, StopCircle, ShieldAlert } from 'lucide-react';
 import { useServers } from '../contexts/ServerContext';
 import { useTranslation } from 'react-i18next';
-import { serverBaseUrl } from '../utils/server';
+import { useApiFetch } from '../hooks/useApiFetch';
 import ConfirmModal from '../components/ConfirmModal';
+import SlideOutPanel from '../components/SlideOutPanel';
 import './Tokens.css';
 import './PluginsMqtt.css';
 
@@ -52,11 +53,11 @@ interface MqttFormState {
 const PluginsMqtt: React.FC = () => {
   const { activeServer } = useServers();
   const { t } = useTranslation();
+  const { apiJson, featureNotEnabled } = useApiFetch({ handleLicense: false });
 
   const [mqtts, setMqtts] = useState<MqttSubscription[]>([]);
   const [mqttLoading, setMqttLoading] = useState(false);
   const [mqttErrorMsg, setMqttErrorMsg] = useState('');
-  const [featureNotEnabled, setFeatureNotEnabled] = useState(false);
 
   const [isMqttFormOpen, setIsMqttFormOpen] = useState(false);
   const [editingMqtt, setEditingMqtt] = useState<MqttSubscription | null>(null);
@@ -64,7 +65,7 @@ const PluginsMqtt: React.FC = () => {
   const [mqttActionBusyId, setMqttActionBusyId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MqttSubscription | null>(null);
 
-  const mqttModalBodyRef = useRef<HTMLDivElement | null>(null);
+  const mqttSidebarBodyRef = useRef<HTMLDivElement | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [mqttForm, setMqttForm] = useState<MqttFormState>({
@@ -84,35 +85,16 @@ const PluginsMqtt: React.FC = () => {
     cleanSession: false
   });
 
-  const baseUrl = useMemo(() => {
-    if (!activeServer) return '';
-    return serverBaseUrl(activeServer.protocol, activeServer.host);
-  }, [activeServer]);
-
   const mqttApiFetch = async (path: string, init?: RequestInit) => {
     if (!activeServer) throw new Error('No active server');
 
-    const res = await fetch(`${baseUrl}${path}`, {
-      ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${activeServer.token}`,
-        ...(init?.headers || {})
-      }
-    });
+    const data = await apiJson(path, init);
 
-    if (res.status === 404) {
-      setFeatureNotEnabled(true);
-      return null;
-    }
-
-    const data = await res.json().catch(() => ({}));
     // Some backends return HTTP 200 but include { success:false, error:"..." } in the body.
     if (
-      !res.ok ||
-      (data &&
-        typeof (data as any).success === 'boolean' &&
-        (data as any).success === false)
+      data &&
+      typeof (data as any).success === 'boolean' &&
+      (data as any).success === false
     ) {
       const messageFromBody =
         typeof (data as any)?.error === 'string'
@@ -127,7 +109,7 @@ const PluginsMqtt: React.FC = () => {
                   ? JSON.stringify(data, null, 2)
                   : undefined;
 
-      throw new Error(messageFromBody || `Request failed: ${res.status}`);
+      throw new Error(messageFromBody || 'Request failed');
     }
     return data;
   };
@@ -140,14 +122,15 @@ const PluginsMqtt: React.FC = () => {
 
     setMqttLoading(true);
     setMqttErrorMsg('');
-    setFeatureNotEnabled(false);
     try {
       const data = await mqttApiFetch('/api/v1/mqtt/subscriptions');
       if (data) {
         setMqtts(Array.isArray(data?.subscriptions) ? (data.subscriptions as MqttSubscription[]) : []);
       }
     } catch (err: any) {
-      setMqttErrorMsg(err.message || t('views.pluginsMqtt.failedToLoad'));
+      if (!featureNotEnabled) {
+        setMqttErrorMsg(err.message || t('views.pluginsMqtt.failedToLoad'));
+      }
       setMqtts([]);
     } finally {
       setMqttLoading(false);
@@ -181,7 +164,7 @@ const PluginsMqtt: React.FC = () => {
     setShowAdvanced(false);
     setIsMqttFormOpen(true);
     setTimeout(() => {
-      mqttModalBodyRef.current?.scrollTo({ top: 0 });
+      mqttSidebarBodyRef.current?.scrollTo({ top: 0 });
     }, 0);
   };
 
@@ -210,7 +193,7 @@ const PluginsMqtt: React.FC = () => {
     setShowAdvanced(!!(sub.username || sub.topic_mapping || sub.clean_session || sub.auto_start));
     setIsMqttFormOpen(true);
     setTimeout(() => {
-      mqttModalBodyRef.current?.scrollTo({ top: 0 });
+      mqttSidebarBodyRef.current?.scrollTo({ top: 0 });
     }, 0);
   };
 
@@ -287,7 +270,7 @@ const PluginsMqtt: React.FC = () => {
       setMqttErrorMsg(err.message || t('views.pluginsMqtt.failedToSave'));
       // Keep the user at the top so they can see full error details.
       setTimeout(() => {
-        mqttModalBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        mqttSidebarBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
       }, 0);
     } finally {
       setMqttSaving(false);
@@ -496,18 +479,25 @@ const PluginsMqtt: React.FC = () => {
         )}
       </div>
 
-      {isMqttFormOpen && (
-        <div className="modal-overlay" role="dialog" aria-modal onClick={closeMqttForm}>
-          <div className="modal-content modal-wide" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{editingMqtt ? t('views.pluginsMqtt.editSubscription') : t('views.pluginsMqtt.createSubscription')}</h3>
-              <button type="button" className="icon-btn" onClick={closeMqttForm}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={submitMqttForm}>
-              <div className="modal-body" ref={mqttModalBodyRef}>
+      <SlideOutPanel
+        open={isMqttFormOpen}
+        onClose={closeMqttForm}
+        width={720}
+        title={editingMqtt ? t('views.pluginsMqtt.editSubscription') : t('views.pluginsMqtt.createSubscription')}
+        bodyRef={mqttSidebarBodyRef}
+        footer={
+          <>
+            <button type="button" className="btn btn-outlined" onClick={closeMqttForm}>
+              {t('common.cancel')}
+            </button>
+            <button type="submit" form="mqtt-form" className="btn btn-primary" disabled={mqttSaving}>
+              {mqttSaving ? <Loader2 className="spin" size={16} /> : <Plus size={16} />}
+              {mqttSaving ? t('views.pluginsMqtt.saving') : editingMqtt ? t('views.pluginsMqtt.save') : t('views.pluginsMqtt.create')}
+            </button>
+          </>
+        }
+      >
+        <form id="mqtt-form" onSubmit={submitMqttForm}>
                 {mqttErrorMsg && (
                   <div className="tokens-alert" style={{ marginBottom: 16 }}>
                     {mqttErrorMsg}
@@ -756,21 +746,8 @@ const PluginsMqtt: React.FC = () => {
                     </div>
                   </div>
                 )}
-              </div>
-
-              <div className="modal-actions" style={{ border: 'none', marginTop: 0, paddingTop: 0 }}>
-                <button type="button" className="btn btn-outlined" onClick={closeMqttForm}>
-                  {t('common.cancel')}
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={mqttSaving}>
-                  {mqttSaving ? <Loader2 className="spin" size={16} /> : <Plus size={16} />}
-                  {mqttSaving ? t('views.pluginsMqtt.saving') : editingMqtt ? t('views.pluginsMqtt.save') : t('views.pluginsMqtt.create')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+              </form>
+            </SlideOutPanel>
 
       {deleteTarget && (
         <ConfirmModal

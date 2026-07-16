@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+import { generateId } from '../utils/id';
+
 export interface ServerConnection {
   id: string;
   name: string;
@@ -55,7 +57,7 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [selectedServerId]);
 
   const addServer = (serverData: Omit<ServerConnection, 'id'>) => {
-    const newServer = { ...serverData, id: Date.now().toString() };
+    const newServer = { ...serverData, id: generateId() };
     setServers(prev => [...prev, newServer]);
     if (!selectedServerId) {
       setSelectedServerId(newServer.id);

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Download, Loader2, Plus, RefreshCw, Upload } from 'lucide-react';
 import { useServers } from '../contexts/ServerContext';
+import { useApiFetch } from '../hooks/useApiFetch';
 import { useTranslation } from 'react-i18next';
 import './WriteData.css';
 
@@ -87,6 +88,7 @@ home_actions,room=Living\ Room,action=alert,level=warn description="Carbon monox
 
 const WriteData: React.FC = () => {
   const { activeServer } = useServers();
+  const { apiFetch } = useApiFetch({ handleLicense: false, handleFeature: false });
   const { t } = useTranslation();
   const [databases, setDatabases] = useState<DatabaseItem[]>([]);
   const [selectedDb, setSelectedDb] = useState<string>('');
@@ -108,18 +110,12 @@ const WriteData: React.FC = () => {
 
   const loadDatabases = async () => {
     if (!activeServer) return;
-    const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, '');
-    const res = await fetch(`${baseUrl}/api/v1/databases`, {
-      headers: {
-        'Authorization': `Bearer ${activeServer.token}`
-      }
-    });
-    const data = await res.json();
+    const data = await apiFetch('/api/v1/databases');
 
-    if (data && data.databases) {
-      setDatabases(data.databases);
-      if (data.databases.length > 0) {
-        setSelectedDb(prev => prev || data.databases[0].name);
+    if (data && (data as any).databases) {
+      setDatabases((data as any).databases);
+      if ((data as any).databases.length > 0) {
+        setSelectedDb(prev => prev || (data as any).databases[0].name);
       } else {
         setSelectedDb('');
       }
@@ -141,7 +137,7 @@ const WriteData: React.FC = () => {
   useEffect(() => {
     if (!activeServer) return;
     loadDatabases().catch(console.error);
-  }, [activeServer]);
+  }, [activeServer, apiFetch]);
 
   useEffect(() => {
     if (!selectedDb || !activeServer) {
@@ -149,20 +145,14 @@ const WriteData: React.FC = () => {
       return;
     }
 
-    const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, '');
-    fetch(`${baseUrl}/api/v1/databases/${selectedDb}/measurements`, {
-      headers: {
-        'Authorization': `Bearer ${activeServer.token}`
-      }
-    })
-      .then(r => r.json())
+    apiFetch(`/api/v1/databases/${selectedDb}/measurements`)
       .then(data => {
-        if (data && data.measurements) {
-          setMeasurements(data.measurements);
+        if (data && (data as any).measurements) {
+          setMeasurements((data as any).measurements);
         }
       })
       .catch(console.error);
-  }, [selectedDb, activeServer]);
+  }, [selectedDb, activeServer, apiFetch]);
 
   useEffect(() => {
     setWriteState(prev => ({
@@ -245,22 +235,20 @@ const WriteData: React.FC = () => {
       chunks.push(lines.slice(i, i + CHUNK_SIZE).join('\n'));
     }
 
-    const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, '');
-
     for (let idx = 0; idx < chunks.length; idx++) {
       let lastErr = '';
       let ok = false;
 
       for (let attempt = 1; attempt <= 2; attempt++) {
-        const response = await fetch(`${baseUrl}/api/v1/write/line-protocol?precision=${precision}`, {
+        const response = await apiFetch(`/api/v1/write/line-protocol?precision=${precision}`, {
           method: 'POST',
+          raw: true,
           headers: {
             'Content-Type': 'text/plain',
-            'Authorization': `Bearer ${activeServer.token}`,
             'x-iedb-database': database
           },
           body: chunks[idx]
-        });
+        }) as Response;
 
         if (response.ok || response.status === 204) {
           ok = true;
@@ -301,11 +289,9 @@ const WriteData: React.FC = () => {
       if (!payload && sample.sourceUrl) {
         let responseText = '';
         try {
-          const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, '');
-          const proxyUrl = `${baseUrl}/api/v1/proxy/fetch?url=${encodeURIComponent(sample.sourceUrl)}`;
-          const r = await fetch(proxyUrl, {
-            headers: { 'Authorization': `Bearer ${activeServer.token}` }
-          });
+          const r = await apiFetch(`/api/v1/proxy/fetch?url=${encodeURIComponent(sample.sourceUrl)}`, {
+            raw: true,
+          }) as Response;
           if (!r.ok) {
             throw new Error(`Failed to download sample data: ${r.status}`);
           }
@@ -357,8 +343,6 @@ const WriteData: React.FC = () => {
     setIsWriting(true);
 
     try {
-      const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, '');
-
       if (writeState.mode === 'line-protocol') {
         const payload = writeState.lineProtocol.trim();
         const validation = validateLineProtocol(payload);
@@ -401,14 +385,14 @@ const WriteData: React.FC = () => {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch(`${baseUrl}${endpoint}`, {
+        const response = await apiFetch(endpoint, {
           method: 'POST',
+          raw: true,
           headers: {
-            'Authorization': `Bearer ${activeServer.token}`,
             'x-iedb-database': database
           },
           body: formData
-        });
+        }) as Response;
 
         if (!response.ok) {
           const msg = await parseWriteError(response);

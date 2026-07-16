@@ -1,0 +1,529 @@
+/* ============================================
+   AiMessage — 全宽列表布局（无气泡）
+   ============================================ */
+
+.ai-message {
+  padding: 10px 16px;
+  border-left: 3px solid transparent;
+  animation: aiMsgFadeIn 0.2s ease;
+}
+
+@keyframes aiMsgFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ai-message:first-child {
+  padding-top: 16px;
+}
+
+.ai-message-user {
+  border-left-color: rgba(99, 102, 241, 0.5);
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.ai-message-assistant {
+  border-left-color: rgba(148, 163, 184, 0.15);
+}
+
+/* ---------- 内容区（全宽，无气泡） ---------- */
+.ai-message-bubble {
+  width: 100%;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.ai-message-error .ai-message-bubble {
+  color: #fca5a5;
+}
+
+/* ---------- User SQL context chip ---------- */
+.ai-user-sql-context {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+.ai-user-sql-label {
+  flex-shrink: 0;
+  color: #818cf8;
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.ai-user-sql-preview {
+  color: #a5b4fc;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow: hidden;
+}
+
+/* ---------- User Error context chip ---------- */
+.ai-user-error-context {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+.ai-user-error-label {
+  flex-shrink: 0;
+  color: #f87171;
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.ai-user-error-preview {
+  color: #fca5a5;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow: hidden;
+}
+
+/* ---------- User text ---------- */
+.ai-user-text-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.ai-user-text-wrap .ai-user-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-user-text {
+  margin: 0;
+  color: var(--text-primary, #e2e8f0);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------- Edit message ---------- */
+.ai-edit-area {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-edit-textarea {
+  width: 100%;
+  min-height: 60px;
+  background: var(--bg-base, #0f0f1a);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 6px;
+  color: var(--text-primary, #e2e8f0);
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.ai-edit-textarea:focus {
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.ai-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.ai-edit-btn {
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  border: 1px solid;
+  transition: all 0.15s ease;
+}
+
+.ai-edit-save {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.3);
+  color: #a5b4fc;
+}
+
+.ai-edit-save:hover {
+  background: rgba(99, 102, 241, 0.25);
+}
+
+.ai-edit-cancel {
+  background: transparent;
+  border-color: var(--border-color, #2a2a3e);
+  color: var(--text-secondary, #94a3b8);
+}
+
+.ai-edit-cancel:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ai-edit-trigger {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 4px;
+  padding: 2px 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #64748b);
+  cursor: pointer;
+  border-radius: 3px;
+  opacity: 0;
+  transition: all 0.15s ease;
+}
+
+.ai-message:hover .ai-edit-trigger {
+  opacity: 1;
+}
+
+.ai-edit-trigger:hover {
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.1);
+}
+
+/* ---------- Thinking indicator ---------- */
+.ai-thinking {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 12px;
+  padding: 2px 0;
+}
+
+/* ---------- Markdown content ---------- */
+.ai-md-content {
+  color: var(--text-primary, #e2e8f0);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ai-md-paragraph {
+  margin: 0 0 6px 0;
+}
+
+.ai-md-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.ai-md-heading {
+  margin: 10px 0 4px 0;
+  font-weight: 600;
+  color: var(--text-primary, #e2e8f0);
+}
+
+.ai-md-heading:first-child {
+  margin-top: 0;
+}
+
+.ai-md-spacer {
+  height: 6px;
+}
+
+.ai-md-inline-code {
+  background: rgba(99, 102, 241, 0.12);
+  color: #c4b5fd;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.ai-md-code-inline {
+  background: #0d0d0d;
+  border: 1px solid var(--border-color, #2a2a3e);
+  border-radius: 5px;
+  padding: 8px 12px;
+  margin: 6px 0;
+  overflow-x: auto;
+  font-size: 12px;
+}
+
+.ai-md-code-inline code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: #e2e8f0;
+}
+
+.ai-md-list {
+  margin: 3px 0 6px 0;
+  padding-left: 18px;
+}
+
+.ai-md-list li {
+  margin-bottom: 2px;
+  color: var(--text-primary, #e2e8f0);
+  line-height: 1.5;
+}
+
+/* ---------- SQL Code Block ---------- */
+.sql-block-wrapper {
+  margin: 8px 0;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #0d0d0d;
+  animation: sqlBlockIn 0.2s ease;
+}
+
+@keyframes sqlBlockIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.sql-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 10px;
+  background: rgba(99, 102, 241, 0.08);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.12);
+}
+
+.sql-block-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #818cf8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sql-block-actions {
+  display: flex;
+  gap: 3px;
+}
+
+.sql-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sql-action-btn:hover {
+  background: rgba(99, 102, 241, 0.12);
+  color: #c4b5fd;
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.sql-action-run {
+  border-color: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  transition: box-shadow 0.3s ease, transform 0.15s ease;
+}
+
+.sql-action-run:hover {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.sql-action-run:active {
+  transform: scale(0.96);
+}
+
+.sql-block-code {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #e2e8f0;
+  white-space: pre;
+}
+
+.sql-block-code code {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* ---------- Streaming cursor ---------- */
+.ai-streaming-cursor {
+  display: inline-block;
+  color: #818cf8;
+  font-size: 13px;
+  animation: blink 1s step-end infinite;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ---------- Error block ---------- */
+.ai-error-block {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 5px;
+  color: #fca5a5;
+  font-size: 12px;
+}
+
+.ai-retry-btn {
+  margin-left: auto;
+  padding: 3px 8px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 3px;
+  background: transparent;
+  color: #fca5a5;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ai-retry-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* ---------- Aborted block ---------- */
+.ai-aborted-block {
+  margin-top: 6px;
+  padding: 5px 10px;
+  background: rgba(251, 191, 36, 0.06);
+  border: 1px solid rgba(251, 191, 36, 0.15);
+  border-radius: 4px;
+  color: #fbbf24;
+  font-size: 11px;
+}
+
+/* ---------- Reasoning（思考过程，默认折叠） ---------- */
+.ai-reasoning {
+  margin: 0 0 10px 0;
+  border: 1px solid var(--border-color, #2a2a3e);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.ai-reasoning-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-muted, #64748b);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.ai-reasoning-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ai-reasoning-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ai-reasoning-label::before {
+  content: '▶';
+  display: inline-block;
+  margin-right: 4px;
+  font-size: 9px;
+  transition: transform 0.15s;
+}
+
+.ai-reasoning[open] .ai-reasoning-label::before {
+  transform: rotate(90deg);
+}
+
+.ai-reasoning-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.ai-reasoning-content {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-top: 1px solid var(--border-color, #2a2a3e);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* ---------- Message meta（模型/token/速度） ---------- */
+.ai-message-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted, #64748b);
+}
+
+.ai-meta-check {
+  color: #4ade80;
+  flex-shrink: 0;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+  .ai-message {
+    padding: 3px 8px;
+  }
+
+  .ai-message-bubble {
+    max-width: 92%;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .sql-block-code {
+    font-size: 11px;
+    padding: 8px 10px;
+  }
+
+  .sql-action-btn span {
+    display: none;
+  }
+
+  .sql-action-btn {
+    padding: 4px;
+  }
+}

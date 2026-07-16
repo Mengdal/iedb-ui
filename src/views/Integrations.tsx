@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { BrainCircuit, Settings2, Eye, EyeOff, FileText, X, Upload, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { BrainCircuit, Settings2, Eye, EyeOff, FileText, X, Upload, ChevronDown, ChevronUp, RefreshCw, Zap, CheckCircle2, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { aiFetch } from '../utils/server';
 import './Integrations.css';
 
 type AIProviderId =
@@ -64,6 +65,8 @@ const Integrations: React.FC = () => {
   const [instructions, setInstructions] = useState(() => localStorage.getItem('iotedge-ai-instructions') || '');
   const [isInstructionsExpanded, setIsInstructionsExpanded] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const currentProvider = providerConfig(provider);
   const effectiveDefaultBaseUrl = currentProvider.defaultBaseUrl || t('views.integrations.baseUrlPlaceholder');
@@ -98,9 +101,7 @@ const Integrations: React.FC = () => {
     setFetchModelsError('');
     setAvailableModels([]);
     try {
-      const res = await fetch(`${baseUrl.replace(/\/$/, '')}/models`, {
-        headers: apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}
-      });
+      const res = await aiFetch(baseUrl, '/models', { apiKey });
       if (!res.ok) {
         const statusMap: Record<number, string> = {
           401: t('views.integrations.fetchModelsError401'),
@@ -143,6 +144,16 @@ const Integrations: React.FC = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Base URL 或 API Key 变化时，重置模型列表缓存与测试连接结果，
+  // 确保下次检测使用最新配置，避免缓存导致误判可用性
+  useEffect(() => {
+    setAvailableModels([]);
+    setHasFetchedModels(false);
+    setFetchModelsError('');
+    setShowModelDropdown(false);
+    setTestResult(null);
+  }, [baseUrl, apiKey]);
 
   const handleModelFocus = () => {
     if (!hasFetchedModels) {
@@ -214,6 +225,46 @@ const Integrations: React.FC = () => {
     localStorage.setItem('iotedge-ai-instructions', instructions);
     setSaveStatus(t('views.integrations.saveStatusSaved'));
     setTimeout(() => setSaveStatus(''), 2000);
+  };
+
+  const handleTestConnection = async () => {
+    if (!baseUrl) {
+      setTestResult({ type: 'error', message: t('views.integrations.testErrorNoUrl') });
+      return;
+    }
+    if (!modelName) {
+      setTestResult({ type: 'error', message: t('views.integrations.testErrorNoModel') });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await aiFetch(baseUrl, '/chat/completions', {
+        apiKey,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: modelName,
+          messages: [{ role: 'user', content: 'hi' }],
+          max_tokens: 1,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error();
+      }
+      // 部分网关/代理会用 200 状态码返回错误体，需检查响应内容是否包含 error 字段
+      const data = await res.json().catch(() => null);
+      if (data?.error) {
+        throw new Error();
+      }
+      setTestResult({ type: 'success', message: t('views.integrations.testSuccess') });
+    } catch {
+      setTestResult({ type: 'error', message: t('views.integrations.testErrorFailed') });
+    } finally {
+      setTesting(false);
+    }
   };
 
   return (
@@ -385,7 +436,7 @@ const Integrations: React.FC = () => {
               <span className="help-text">{t('views.integrations.customInstructionsHelp')}</span>
             </div>
 
-            <div className="integration-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="integration-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <button 
                 className="btn-filled-light" 
                 disabled={!apiKey && currentProvider.requiresApiKey}
@@ -393,7 +444,19 @@ const Integrations: React.FC = () => {
               >
                 <Settings2 size={16} /> {t('views.integrations.saveAiConfigButton')}
               </button>
+              <button 
+                className="btn-filled-light" 
+                disabled={testing || (!apiKey && currentProvider.requiresApiKey)}
+                onClick={handleTestConnection}
+              >
+                {testing ? <RefreshCw size={16} className="spinning" /> : <Zap size={16} />} {t('views.integrations.testConnectionButton')}
+              </button>
               {saveStatus && <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>{saveStatus}</span>}
+              {testResult && (
+                <span className={`test-result test-result-${testResult.type}`}>
+                  {testResult.type === 'success' ? <CheckCircle2 size={14} /> : <XCircle size={14} />} {testResult.message}
+                </span>
+              )}
             </div>
           </div>
         </div>

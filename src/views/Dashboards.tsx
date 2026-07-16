@@ -7,39 +7,15 @@ import {
 import ReactECharts from 'echarts-for-react';
 import { useTranslation } from 'react-i18next';
 import { useServers } from '../contexts/ServerContext';
+import { useApiFetch } from '../hooks/useApiFetch';
+import { useResizeObserver } from '../hooks/useResizeObserver';
+import { usePolling } from '../hooks/usePolling';
+import { generateId } from '../utils/id';
+import { formatTime } from '../utils/formatTime';
 import type { CurrentView } from '../App';
 import { GridLayout } from 'react-grid-layout';
 import type { Layout } from 'react-grid-layout';
 
-const useResizeObserver = () => {
-  const [width, setWidth] = useState(1200);
-  const [node, setNode] = useState<HTMLDivElement | null>(null);
-
-  const containerRef = useCallback((el: HTMLDivElement | null) => {
-    setNode(el);
-  }, []);
-
-  useEffect(() => {
-    if (!node) return;
-    // Set initial width immediately
-    if (node.offsetWidth > 0) {
-      setWidth(node.offsetWidth);
-    }
-    const observer = new ResizeObserver((entries) => {
-      window.requestAnimationFrame(() => {
-        if (!Array.isArray(entries) || !entries.length) return;
-        const entry = entries[0];
-        if (entry.contentRect.width > 0) {
-          setWidth(entry.contentRect.width);
-        }
-      });
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [node]);
-
-  return { width, containerRef };
-};
 import { buildChartOption, downloadFile, isChartError } from '../utils/chartUtils';
 import type { QueryResponse } from './DataExplorer';
 import 'react-grid-layout/css/styles.css';
@@ -78,7 +54,6 @@ interface Dashboard {
 
 const getStorageKey = (serverId?: string) => `iotedge-dashboards-${serverId || 'default'}`;
 const VALID_TIME_RANGES = ['15 minutes', '1 hour', '6 hours', '24 hours', '7 days', '30 days', 'custom'];
-const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 
 interface DashboardsProps {
@@ -87,6 +62,7 @@ interface DashboardsProps {
 
 const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
   const { activeServer } = useServers();
+  const { apiFetch } = useApiFetch({ handleLicense: false, handleFeature: false });
   const { t, i18n } = useTranslation();
 
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
@@ -101,6 +77,7 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
     }
   });
   const [searchQuery, setSearchQuery] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingDashboard, setEditingDashboard] = useState<Dashboard | null>(null);
@@ -127,7 +104,6 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
   const [showAddCellModal, setShowAddCellModal] = useState(false);
   const [newCellName, setNewCellName] = useState('');
 
-  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fullscreenRef = useRef<HTMLDivElement>(null);
   const chartRefs = useRef<Map<string, any>>(new Map());
@@ -247,6 +223,7 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
   const handleImportDashboard = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setImportError(null);
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
@@ -275,7 +252,7 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
         };
         setDashboards(prev => [...prev, imported]);
       } catch {
-        alert(t('views.dashboards.importFailed'));
+        setImportError(t('views.dashboards.importFailed'));
       }
     };
     reader.readAsText(file);
@@ -292,36 +269,24 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
     setViewMode('list');
     setSelectedId(null);
     setCellResults({});
-    stopAutoRefresh();
   };
 
-  const stopAutoRefresh = () => {
-    if (autoRefreshRef.current) {
-      clearInterval(autoRefreshRef.current);
-      autoRefreshRef.current = null;
-    }
-  };
+
 
   const executeQuery = useCallback(async (queryText: string, database: string): Promise<QueryResponse> => {
     if (!activeServer || !queryText.trim()) {
       return { success: false, error: 'No query to execute' };
     }
-    const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, '');
     try {
-      const resp = await fetch(`${baseUrl}/api/v1/query`, {
+      return await apiFetch('/api/v1/query', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${activeServer.token}`,
-          ...(database ? { 'x-iedb-database': database } : {})
-        },
+        headers: database ? { 'x-iedb-database': database } : {},
         body: JSON.stringify({ sql: queryText })
-      });
-      return await resp.json();
+      }) as QueryResponse;
     } catch (err: any) {
       return { success: false, error: err?.message || 'Network error' };
     }
-  }, [activeServer]);
+  }, [activeServer, apiFetch]);
 
   const applyTimeRangeToQuery = (sql: string, timeRange: string, customStart?: string, customEnd?: string) => {
     if (!sql || !sql.trim()) return sql;
@@ -371,15 +336,9 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
 
   const handleAutoRefreshChange = (seconds: number) => {
     if (!currentDashboard) return;
-    stopAutoRefresh();
     setDashboards(prev => prev.map(d =>
       d.id === selectedId ? { ...d, autoRefresh: seconds } : d
     ));
-    if (seconds > 0) {
-      autoRefreshRef.current = setInterval(() => {
-        refreshAllCells();
-      }, seconds * 1000);
-    }
   };
 
   const handleTimeRangeChange = (timeRange: string) => {
@@ -404,21 +363,18 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
   };
 
   useEffect(() => {
-    if (currentDashboard && currentDashboard.autoRefresh > 0) {
-      stopAutoRefresh();
-      autoRefreshRef.current = setInterval(() => {
-        refreshAllCells();
-      }, currentDashboard.autoRefresh * 1000);
-    }
-    return () => stopAutoRefresh();
-  }, [currentDashboard?.autoRefresh, selectedId, refreshAllCells]);
-
-  useEffect(() => {
     if (currentDashboard && currentDashboard.cells.length > 0 && viewMode === 'detail') {
       refreshAllCells();
     }
-    return () => stopAutoRefresh();
   }, [selectedId, currentDashboard?.timeRange, currentDashboard?.customStart, currentDashboard?.customEnd]);
+
+  const autoRefreshMs = currentDashboard?.autoRefresh ? currentDashboard.autoRefresh * 1000 : 0;
+  usePolling(() => {
+    refreshAllCells();
+  }, autoRefreshMs, {
+    enabled: viewMode === 'detail' && !!currentDashboard && currentDashboard.cells.length > 0 && autoRefreshMs > 0,
+    immediate: false,
+  });
 
   const toggleFullscreen = async () => {
     if (!fullscreenRef.current) return;
@@ -634,6 +590,12 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
           </div>
         </div>
 
+        {importError && (
+          <div className="dashboard-import-error" style={{ color: '#f87171', fontSize: 13, padding: '8px 12px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 5, marginBottom: 12 }}>
+            {importError}
+          </div>
+        )}
+
         {filteredDashboards.length === 0 ? (
           <div className="dashboards-empty">
             <LayoutDashboard size={48} color="var(--text-muted)" />
@@ -685,7 +647,7 @@ const Dashboards: React.FC<DashboardsProps> = ({ onNavigate }) => {
                 )}
                 <div className="dashboard-card-meta">
                   <Clock size={12} />
-                  <span>{new Date(dashboard.createdAt).toLocaleString(i18n.language)}</span>
+                  <span>{formatTime(dashboard.createdAt, i18n.language)}</span>
                   <span className="cell-count">{dashboard.cells.length} cells</span>
                 </div>
               </div>

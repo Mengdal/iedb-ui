@@ -24,3 +24,5 @@ pnpm-debug.log*
 
 .codegraph/
 .cursor/
+.kiro/
+.codebuddy/

@@ -1,15 +1,173 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Play, History, Plus, Database, Table2, LineChart, BarChart2, Search, Download, Loader2, Activity, ChevronLeft, ChevronRight, RefreshCw, Sparkles, X, Clock, Tag, Hash, Filter, LayoutDashboard, ArrowRight, Star } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Play, History, Plus, Database, Table2, LineChart, BarChart2, Search, Download, Loader2, Activity, ChevronLeft, ChevronRight, RefreshCw, Sparkles, X, Clock, Tag, Hash, Filter, LayoutDashboard, ArrowRight, Star, AlignLeft, CornerDownLeft, Command } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
-import CodeMirror from '@uiw/react-codemirror';
-import { sql } from '@codemirror/lang-sql';
+import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { sql, type SQLConfig } from '@codemirror/lang-sql';
+import { Compartment } from '@codemirror/state';
+import { gutter, GutterMarker, ViewPlugin, lineNumbers } from '@codemirror/view';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
+import i18n from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { useServers } from '../contexts/ServerContext';
+import { useApiFetch } from '../hooks/useApiFetch';
+import { generateId } from '../utils/id';
+import { debounce } from '../utils/debounce';
+import { formatTime } from '../utils/formatTime';
 import type { CurrentView } from '../App';
 import { buildChartOption, downloadFile, isChartError } from '../utils/chartUtils';
-import { serverBaseUrl } from '../utils/server';
+import AiQueryPanel from '../components/AiQueryPanel';
 import './DataExplorer.css';
+
+// Compartment allows dynamic reconfiguration of SQL schema without rebuilding the editor
+const sqlCompartment = new Compartment();
+const aiGutterCompartment = new Compartment();
+
+// ---- CodeMirror AI Gutter ----
+// Module-level click callbacks and error state (set by the React component)
+let _onAiGutterClick: ((lineText: string) => void) | null = null;
+let _onAiGutterErrorClick: ((lineText: string, error: string) => void) | null = null;
+let _onRunGutterClick: ((sql: string) => void) | null = null;
+let _currentError: string | null = null;
+// 记录最近一次出错的 SQL 文本，用于在 gutter 上只标注出错的那一条语句
+let _erroredSql: string | null = null;
+
+const AI_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>`;
+const ERROR_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>`;
+const RUN_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+
+/** SQL 语句起始关键字 */
+const SQL_START_KEYWORDS = new Set([
+  'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'ALTER',
+  'WITH', 'EXPLAIN', 'SHOW', 'DESCRIBE', 'GRANT', 'REVOKE', 'TRUNCATE',
+  'SET', 'USE', 'BEGIN', 'CALL',
+]);
+
+/** 判断当前行是否是一个 SQL 语句的起始行 */
+function isSqlStatementStart(view: { state: { doc: { line(n: number): { from: number; to: number; text: string }; lines: number; sliceString(from: number, to: number): string } } }, lineNumber: number): boolean {
+  const doc = view.state.doc;
+  if (lineNumber < 1 || lineNumber > doc.lines) return false;
+  const line = doc.line(lineNumber);
+  const text = doc.sliceString(line.from, line.to).trim();
+  // 空行或注释行不算
+  if (!text || text.startsWith('--')) return false;
+  // 第一行非空非注释一定是起始行
+  if (lineNumber === 1) return true;
+  // 前一行是空行或注释行，则当前行是起始行
+  const prevLine = doc.line(lineNumber - 1);
+  const prevText = doc.sliceString(prevLine.from, prevLine.to).trim();
+  if (!prevText || prevText.startsWith('--')) return true;
+  // 前一行以分号结尾，则当前行是新语句的起始行
+  if (prevText.endsWith(';')) return true;
+  // 当前行以 SQL 关键字开头，则认为是新语句起始
+  const firstWord = text.split(/\s+/)[0].toUpperCase();
+  if (SQL_START_KEYWORDS.has(firstWord)) return true;
+  return false;
+}
+
+/** Build the gutter marker for SQL statement start lines; shows run button, AI button, and error button when there is an active error */
+function createAiGutterMarker(hasError: boolean): GutterMarker {
+  return new class extends GutterMarker {
+    toDOM() {
+      const el = document.createElement('span');
+      el.className = 'cm-ai-gutter-cell';
+
+      const runBtn = document.createElement('span');
+      runBtn.className = 'cm-run-gutter-btn';
+      runBtn.innerHTML = RUN_ICON_SVG;
+      runBtn.title = i18n.t('views.dataExplorer.runStatement', '执行此语句');
+      el.appendChild(runBtn);
+
+      const aiBtn = document.createElement('span');
+      aiBtn.className = 'cm-ai-gutter-btn';
+      aiBtn.innerHTML = AI_ICON_SVG;
+      aiBtn.title = i18n.t('views.dataExplorer.askAi', '向 AI 提问此查询');
+      el.appendChild(aiBtn);
+
+      if (hasError) {
+        const errBtn = document.createElement('span');
+        errBtn.className = 'cm-ai-gutter-error-btn';
+        errBtn.innerHTML = ERROR_ICON_SVG;
+        errBtn.title = i18n.t('views.dataExplorer.askAiAboutError', '向 AI 询问此错误');
+        el.appendChild(errBtn);
+      }
+
+      return el;
+    }
+    eq(_other: GutterMarker): boolean { return false; }
+  };
+}
+
+/** Extract a complete SQL statement starting at the given line (1-indexed). Stops at ';', blank line, comment line, or EOF. */
+function extractStatementAtLine(view: { state: { doc: { line(n: number): { from: number; to: number; text: string }; lines: number; sliceString(from: number, to: number): string } } }, startLineNum: number): string {
+  const doc = view.state.doc;
+  const lines: string[] = [];
+  for (let i = startLineNum; i <= doc.lines; i++) {
+    const l = doc.line(i);
+    const t = doc.sliceString(l.from, l.to);
+    const trimmed = t.trim();
+    if (!trimmed || trimmed.startsWith('--')) {
+      if (lines.length > 0) break;
+      continue;
+    }
+    lines.push(t);
+    if (trimmed.endsWith(';')) break;
+  }
+  return lines.join('\n').trim();
+}
+
+/** Gutter extension factory: show AI icon on SQL statement start lines, and error icon on the specific statement that errored */
+function createAiGutter() {
+  const normalMarker = createAiGutterMarker(false);
+  const errorMarker = createAiGutterMarker(true);
+  return gutter({
+    class: 'cm-ai-gutter',
+    lineMarker(view, line) {
+      const lineNum = view.state.doc.lineAt(line.from).number; // 1-indexed
+      if (!isSqlStatementStart(view, lineNum)) return null;
+      // 仅在出错的语句起始行显示错误按钮
+      if (_currentError && _erroredSql) {
+        const stmt = extractStatementAtLine(view, lineNum);
+        if (stmt && stmt.trim() === _erroredSql.trim()) return errorMarker;
+      }
+      return normalMarker;
+    },
+    initialSpacer: () => new class extends GutterMarker {
+      toDOM(): HTMLElement { return document.createElement('span'); }
+      eq(_other: GutterMarker): boolean { return true; }
+    },
+  });
+}
+
+/** ViewPlugin: handle clicks on the gutter markers (run button, AI button, or error button) */
+const aiGutterClickPlugin = ViewPlugin.define((view) => {
+  const handler = (e: MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const runBtn = target.closest('.cm-run-gutter-btn');
+    const aiBtn = target.closest('.cm-ai-gutter-btn');
+    const errBtn = target.closest('.cm-ai-gutter-error-btn');
+    if (!runBtn && !aiBtn && !errBtn) return;
+    e.preventDefault();
+    // 用坐标定位点击行，避免 gutter DOM 元素索引偏移导致行号错位
+    const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+    if (pos == null) return;
+    const doc = view.state.doc;
+    const startLineNum = doc.lineAt(pos).number; // 1-indexed
+    const lineText = extractStatementAtLine(view, startLineNum);
+    if (runBtn) {
+      _onRunGutterClick?.(lineText);
+    } else if (aiBtn) {
+      _onAiGutterClick?.(lineText);
+    } else if (errBtn && _currentError) {
+      _onAiGutterErrorClick?.(lineText, _currentError);
+    }
+  };
+  view.dom.addEventListener('mousedown', handler, true);
+  return {
+    destroy() {
+      view.dom.removeEventListener('mousedown', handler, true);
+    },
+  };
+});
 
 interface DatabaseItem {
   name: string;
@@ -51,9 +209,150 @@ interface QueryHistoryItem {
   timestamp: number;
 }
 
-const defaultQuery = "SELECT\n  *\nFROM cpu\nWHERE\n  time >= now() - interval '1 hour'\nLIMIT 1000";
+const defaultQuery = "";
 
+// 模块级缓存：在 SPA 内切换页面（组件卸载/重挂）时保留 tabs 状态，刷新页面时模块重新加载自然清空
+let _cachedTabs: QueryTab[] | null = null;
+let _cachedActiveTabId: string | null = null;
 
+// Lightweight SQL formatter that follows the project's default SQL style:
+// uppercase keywords, two-space indentation, one item per line in SELECT/GROUP BY/ORDER BY,
+// and AND/OR conditions on separate lines in WHERE. No external dependency.
+const formatSql = (input: string): string => {
+  if (!input || !input.trim()) return input;
+
+  // Protect string literals so formatting doesn't touch their contents.
+  const literals: string[] = [];
+  let sql = input.replace(/'([^']|'')*'/g, (match) => {
+    literals.push(match);
+    return `__LIT_${literals.length - 1}__`;
+  });
+
+  // Normalize whitespace and comma spacing.
+  sql = sql.replace(/\s+/g, ' ').replace(/\s*,\s*/g, ', ').trim();
+
+  // Uppercase keywords.
+  const keywords = [
+    'SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'HAVING', 'LIMIT',
+    'JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN', 'OUTER JOIN', 'CROSS JOIN',
+    'ON', 'UNION', 'ALL', 'DISTINCT', 'AS', 'AND', 'OR', 'NOT', 'IN', 'IS', 'NULL',
+    'BETWEEN', 'LIKE', 'EXISTS', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END'
+  ];
+  keywords.forEach(kw => {
+    const regex = new RegExp(`\\b${kw}\\b`, 'gi');
+    sql = sql.replace(regex, kw);
+  });
+
+  // Split into clauses by major block keywords.
+  const splitRegex = /\b(SELECT|FROM|WHERE|GROUP BY|ORDER BY|HAVING|LIMIT|UNION|JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|OUTER JOIN|CROSS JOIN|ON)\b/gi;
+  const tokens = sql.split(splitRegex).filter(s => s.trim() !== '');
+
+  // Build keyword/content clauses.
+  const clauses: { keyword: string; content: string }[] = [];
+  let currentKeyword = '';
+  let currentContent = '';
+
+  tokens.forEach(token => {
+    const trimmed = token.trim();
+    if (/^(SELECT|FROM|WHERE|GROUP BY|ORDER BY|HAVING|LIMIT|UNION|JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|OUTER JOIN|CROSS JOIN|ON)$/i.test(trimmed)) {
+      if (currentKeyword || currentContent) {
+        clauses.push({ keyword: currentKeyword, content: currentContent.trim() });
+      }
+      currentKeyword = trimmed.toUpperCase();
+      currentContent = '';
+    } else {
+      currentContent += (currentContent ? ' ' : '') + trimmed;
+    }
+  });
+  if (currentKeyword || currentContent) {
+    clauses.push({ keyword: currentKeyword, content: currentContent.trim() });
+  }
+
+  // Format each clause.
+  const formattedClauses = clauses.map(clause => {
+    const { keyword, content } = clause;
+    if (!keyword) return content;
+
+    if (keyword === 'SELECT') {
+      const cols = splitTopLevel(content, ',');
+      return `SELECT\n  ${cols.join(',\n  ')}`;
+    }
+
+    if (keyword === 'WHERE') {
+      const conditions = splitWhereConditions(content);
+      return `WHERE\n  ${conditions.join('\n  ')}`;
+    }
+
+    if (keyword === 'GROUP BY' || keyword === 'ORDER BY') {
+      const items = splitTopLevel(content, ',');
+      return `${keyword}\n  ${items.join(',\n  ')}`;
+    }
+
+    if (keyword === 'FROM' || keyword === 'HAVING' || keyword === 'LIMIT') {
+      return `${keyword} ${content}`;
+    }
+
+    // JOIN, ON, UNION, etc.
+    return `${keyword} ${content}`;
+  });
+
+  let result = formattedClauses.join('\n');
+
+  // Restore protected string literals.
+  literals.forEach((literal, idx) => {
+    result = result.replace(`__LIT_${idx}__`, literal);
+  });
+
+  return result.replace(/\n\s*\n/g, '\n').trim();
+};
+
+const splitTopLevel = (input: string, delimiter: string): string[] => {
+  const result: string[] = [];
+  let current = '';
+  let depth = 0;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+
+    if (ch === delimiter && depth === 0) {
+      if (current.trim()) result.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) result.push(current.trim());
+  return result;
+};
+
+const splitWhereConditions = (input: string): string[] => {
+  const result: string[] = [];
+  let current = '';
+  let depth = 0;
+  const words = input.split(' ');
+  let pendingOp = '';
+
+  for (const word of words) {
+    for (const ch of word) {
+      if (ch === '(') depth++;
+      if (ch === ')') depth--;
+    }
+    if (depth === 0 && /^(AND|OR)$/i.test(word)) {
+      if (current.trim()) {
+        result.push(pendingOp ? `${pendingOp} ${current.trim()}` : current.trim());
+      }
+      pendingOp = word.toUpperCase();
+      current = '';
+    } else {
+      current += (current ? ' ' : '') + word;
+    }
+  }
+  if (current.trim()) {
+    result.push(pendingOp ? `${pendingOp} ${current.trim()}` : current.trim());
+  }
+  return result;
+};
 
 export const getSelectedTagValues = (sql: string, column: string): string[] => {
   if (!sql) return [];
@@ -71,13 +370,14 @@ export const getSelectedTagValues = (sql: string, column: string): string[] => {
   return [];
 };
 
-const TagDropdown = ({ tableName, columnName, activeServer, selectedDb, onSelectValue, initialChecked, children }: any) => {
+const TagDropdown = ({ tableName, columnName, selectedDb, onSelectValue, initialChecked, children, trailing }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const [values, setValues] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [checkedValues, setCheckedValues] = useState<string[]>([]);
   const { t } = useTranslation();
+  const { apiFetch } = useApiFetch({ handleLicense: false, handleFeature: false });
 
   const handleToggle = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -88,23 +388,17 @@ const TagDropdown = ({ tableName, columnName, activeServer, selectedDb, onSelect
       setCheckedValues(initialChecked || []);
       if (values.length === 0) {
         setIsLoading(true);
-        const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, "");
-        fetch(`${baseUrl}/api/v1/query`, {
+        apiFetch('/api/v1/query', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${activeServer.token}`,
-            'x-iedb-database': selectedDb
-          },
+          headers: selectedDb ? { 'x-iedb-database': selectedDb } : {},
           body: JSON.stringify({
             sql: `SELECT DISTINCT ${columnName} FROM ${tableName} LIMIT 1000`
           })
         })
-          .then(r => r.json())
-          .then((data: QueryResponse) => {
+          .then((data: any) => {
             if (data.success && data.data) {
-              const vals = data.data.map(row => row[0]?.toString() || '');
-              setValues(vals.filter(v => v !== ''));
+              const vals = data.data.map((row: any) => row[0]?.toString() || '');
+              setValues(vals.filter((v: string) => v !== ''));
             }
           })
           .catch(console.error)
@@ -119,19 +413,17 @@ const TagDropdown = ({ tableName, columnName, activeServer, selectedDb, onSelect
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }} className={isOpen ? "h-full flex flex-col overflow-hidden" : ""}>
-      <div className="tree-leaf" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px' }}>
+      <div className="tree-leaf" style={{ display: 'flex', alignItems: 'center', gap: '4px', paddingRight: '8px' }}>
         {children}
         <button
           type="button"
-          className="icon-btn-small"
+          className="icon-btn-small tag-filter-btn"
           onClick={handleToggle}
           title={t('views.dataExplorer.filterTag', 'Filter Tag')}
-          style={{ padding: '2px', marginLeft: '4px', opacity: 0.7 }}
-          onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-          onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
         >
           <Filter size={12} color={isOpen ? 'var(--accent-primary)' : 'var(--text-secondary)'} />
         </button>
+        {trailing}
       </div>
       {isOpen && (
         <div
@@ -216,28 +508,35 @@ interface DataExplorerProps {
 
 const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
   const { activeServer } = useServers();
+  const { apiFetch } = useApiFetch({ handleLicense: false, handleFeature: false });
   const { t, i18n } = useTranslation();
   const [databases, setDatabases] = useState<DatabaseItem[]>([]);
-  const [selectedDb, setSelectedDb] = useState<string>('');
+  const [selectedDb, setSelectedDb] = useState<string>(() => {
+    try { return localStorage.getItem('iotedge-selected-db') || ''; } catch { return ''; }
+  });
   const [measurements, setMeasurements] = useState<MeasurementItem[]>([]);
+  const [tableSearch, setTableSearch] = useState('');
   const [tableColumns, setTableColumns] = useState<Record<string, string[]>>({});
-  const [tableSchemas, setTableSchemas] = useState<Record<string, { tags: string[], fields: string[] }>>({});
+  const [tableSchemas, setTableSchemas] = useState<Record<string, { tags: string[], fields: string[], types: Record<string, string> }>>({});
 
-  const [tabs, setTabs] = useState<QueryTab[]>([{
-    id: '1',
-    count: 1,
-    queryCode: defaultQuery,
-    queryResult: null,
-    expandedTable: null,
-    selectedColumns: [],
-    timeRange: '1 hour',
-    customStart: '',
-    customEnd: '',
-    visualization: 'table',
-    currentPage: 1,
-    pageSize: 32
-  }]);
-  const [activeTabId, setActiveTabId] = useState('1');
+  const [tabs, setTabs] = useState<QueryTab[]>(() => {
+    if (_cachedTabs) return _cachedTabs;
+    return [{
+      id: '1',
+      count: 1,
+      queryCode: defaultQuery,
+      queryResult: null,
+      expandedTable: null,
+      selectedColumns: [],
+      timeRange: 'none',
+      customStart: '',
+      customEnd: '',
+      visualization: 'table',
+      currentPage: 1,
+      pageSize: 32
+    }];
+  });
+  const [activeTabId, setActiveTabId] = useState(() => _cachedActiveTabId ?? '1');
   const activeTab = tabs.find(t => t.id === activeTabId)!;
 
   const [queryHistory, setQueryHistory] = useState<QueryHistoryItem[]>(() => {
@@ -257,7 +556,73 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
     }
   });
   const [showDrawer, setShowDrawer] = useState(false);
+  const [drawerAnim, setDrawerAnim] = useState<'entering' | 'open' | 'exiting' | 'hidden'>('hidden');
   const [drawerTab, setDrawerTab] = useState<'history' | 'favorites'>('history');
+
+  useEffect(() => {
+    if (showDrawer) {
+      setDrawerAnim('entering');
+      const raf = requestAnimationFrame(() => setDrawerAnim('open'));
+      return () => cancelAnimationFrame(raf);
+    } else {
+      if (drawerAnim === 'hidden') return;
+      setDrawerAnim('exiting');
+      const timer = setTimeout(() => setDrawerAnim('hidden'), 300);
+      return () => clearTimeout(timer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDrawer]);
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const [aiPresetQuestion, setAiPresetQuestion] = useState<string | undefined>(undefined);
+  const [aiPresetInput, setAiPresetInput] = useState<string | undefined>(undefined);
+  const [aiSqlContext, setAiSqlContext] = useState<string | undefined>(undefined);
+  const [aiErrorContext, setAiErrorContext] = useState<string | undefined>(undefined);
+
+  // Register AI gutter click handlers — 将 SQL / 错误信息作为引用附件，不占输入框
+  useEffect(() => {
+    _onAiGutterClick = (lineText: string) => {
+      setShowAiPanel(true);
+      setAiSqlContext(lineText);
+      setAiErrorContext(undefined);
+      setAiPresetQuestion(undefined);
+      setAiPresetInput(undefined);
+    };
+    _onAiGutterErrorClick = (lineText: string, error: string) => {
+      setShowAiPanel(true);
+      setAiSqlContext(lineText);
+      setAiErrorContext(error);
+      setAiPresetQuestion(undefined);
+      setAiPresetInput(undefined);
+    };
+    return () => { _onAiGutterClick = null; _onAiGutterErrorClick = null; };
+  }, []);
+
+  // Detect platform for shortcut hints (Mac vs Windows/Linux)
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+
+  // 持久化选中的数据库
+  useEffect(() => {
+    try { localStorage.setItem('iotedge-selected-db', selectedDb); } catch { /* ignore */ }
+  }, [selectedDb]);
+
+  // 恢复并监听编辑器高度变化，持久化用户调整的高度
+  useEffect(() => {
+    const el = editorAreaRef.current;
+    if (!el) return;
+    try {
+      const savedHeight = localStorage.getItem('iotedge-editor-height');
+      if (savedHeight) el.style.height = savedHeight;
+    } catch { /* ignore */ }
+    const saveHeight = debounce((height: string) => {
+      try { localStorage.setItem('iotedge-editor-height', height); } catch { /* ignore */ }
+    }, 300);
+    const observer = new ResizeObserver(() => {
+      const h = el.style.height;
+      if (h) saveHeight(h);
+    });
+    observer.observe(el);
+    return () => { observer.disconnect(); };
+  }, []);
 
   const toggleFavorite = (item: QueryHistoryItem) => {
     setFavoriteQueries(prev => {
@@ -276,11 +641,10 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
   const [isRefreshingDbs, setIsRefreshingDbs] = useState(false);
   const [isLoadingDbs, setIsLoadingDbs] = useState(false);
   const [showTimeModal, setShowTimeModal] = useState(false);
-  const [prevTimeRange, setPrevTimeRange] = useState("1 hour");
 
-  const [queryMode, setQueryMode] = useState<'sql' | 'nl'>('sql');
-  const [nlQuery, setNlQuery] = useState('');
-  const [isGeneratingSql, setIsGeneratingSql] = useState(false);
+  // Ref to access the CodeMirror EditorView for dynamic extension reconfiguration
+  const editorRef = useRef<ReactCodeMirrorRef>(null);
+  const [prevTimeRange, setPrevTimeRange] = useState("none");
 
   const [showSaveDashboardModal, setShowSaveDashboardModal] = useState(false);
   const [saveCellName, setSaveCellName] = useState('');
@@ -294,24 +658,36 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
   const [editingCellName, setEditingCellName] = useState<string>('');
   const [editingDashboardId, setEditingDashboardId] = useState<string | null>(null);
 
-  const schemaCacheRef = useRef<Record<string, any>>({});
   const selectedDbRef = useRef(selectedDb);
   selectedDbRef.current = selectedDb;
+
+  // 始终指向最新的 activeTabId，避免异步回调里使用陈旧闭包导致结果写到错误的 tab
+  const activeTabIdRef = useRef(activeTabId);
+  activeTabIdRef.current = activeTabId;
+
+  const editorAreaRef = useRef<HTMLDivElement>(null);
   const editingCellIdRef = useRef(editingCellId);
   editingCellIdRef.current = editingCellId;
   const editingDashboardIdRef = useRef(editingDashboardId);
   editingDashboardIdRef.current = editingDashboardId;
 
-  const updateActiveTab = (updates: Partial<QueryTab>) => {
-    setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, ...updates } : t));
+  const updateActiveTab = (updates: Partial<QueryTab>, tabId?: string) => {
+    const targetId = tabId ?? activeTabIdRef.current;
+    setTabs(prev => prev.map(t => t.id === targetId ? { ...t, ...updates } : t));
   };
+
+  // 将 tabs 和 activeTabId 同步到模块级缓存，切换页面后组件重挂时可恢复，刷新页面时自然清空
+  useEffect(() => {
+    _cachedTabs = tabs;
+    _cachedActiveTabId = activeTabId;
+  }, [tabs, activeTabId]);
 
   useEffect(() => {
     try {
       const pending = localStorage.getItem('iotedge-pending-query');
       if (pending) {
         const { text, database, cellId, dashboardId, cellName, cellType } = JSON.parse(pending);
-        const newId = Date.now().toString();
+        const newId = generateId();
         setTabs(prev => [
           ...prev,
           {
@@ -321,7 +697,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
             queryResult: null,
             expandedTable: null,
             selectedColumns: [],
-            timeRange: '1 hour',
+            timeRange: 'none',
             customStart: '',
             customEnd: '',
             visualization: (cellType === 'line' || cellType === 'bar' || cellType === 'table') ? cellType : 'table',
@@ -343,38 +719,67 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
   useEffect(() => {
     if (!activeServer) return;
     setIsLoadingDbs(true);
-    const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, "");
-    fetch(`${baseUrl}/api/v1/databases`, {
-      headers: {
-        'Authorization': `Bearer ${activeServer.token}`
-      }
-    })
-      .then(r => r.json())
+    apiFetch('/api/v1/databases')
       .then(data => {
-        if (data && data.databases) {
-          setDatabases(data.databases);
+        if (data && (data as any).databases) {
+          setDatabases((data as any).databases);
         }
       })
       .catch(console.error)
       .finally(() => setIsLoadingDbs(false));
-  }, [activeServer]);
+  }, [activeServer, apiFetch]);
+
+  const forceRefreshSchemaRef = useRef(false);
+
+  // Fetch measurements and schemas for a database
+  const fetchMeasurementsForDb = (db: string) => {
+    if (!activeServer) return;
+    apiFetch(`/api/v1/databases/${db}/measurements`)
+      .then(data => {
+        const forceRefresh = forceRefreshSchemaRef.current;
+        forceRefreshSchemaRef.current = false;
+        if (data && (data as any).measurements) {
+          setMeasurements((data as any).measurements);
+          // Optionally, prefetch schemas to power autocomplete instantly
+          (data as any).measurements.forEach((m: MeasurementItem) => {
+            if (forceRefresh || !tableColumns[m.name]) {
+              apiFetch(`/api/v1/databases/${db}/measurements/${m.name}/schema`)
+                .then(schemaData => {
+                  if ((schemaData as any).success) {
+                    const tags = (schemaData as any).tags || [];
+                    const fields = (schemaData as any).fields || [];
+                    const types = (schemaData as any).types || {};
+                    const cols = ['time', ...tags, ...fields];
+                    if (cols.length > 0) {
+                      setTableColumns(prev => ({ ...prev, [m.name]: cols }));
+                      setTableSchemas(prev => ({ ...prev, [m.name]: { tags, fields, types } }));
+                    }
+                  }
+                })
+                .catch(() => { }); // silent catch for background prefetch
+            }
+          });
+        }
+      })
+      .catch(console.error);
+  };
 
   const handleRefreshDatabases = () => {
     if (!activeServer) return;
     setIsRefreshingDbs(true);
-    const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, "");
-    fetch(`${baseUrl}/api/v1/databases`, {
-      headers: {
-        'Authorization': `Bearer ${activeServer.token}`
-      }
-    })
-      .then(r => r.json())
+    apiFetch('/api/v1/databases')
       .then(data => {
-        if (data && data.databases) {
-          setDatabases(data.databases);
-          if (data.databases.length > 0) {
-            const match = data.databases.find((d: any) => d.name === selectedDb);
-            if (!match) setSelectedDb('');
+        if (data && (data as any).databases) {
+          setDatabases((data as any).databases);
+          if ((data as any).databases.length > 0) {
+            const match = (data as any).databases.find((d: any) => d.name === selectedDb);
+            if (!match) {
+              setSelectedDb('');
+            } else {
+              // Refresh measurements and schemas for the currently selected database
+              forceRefreshSchemaRef.current = true;
+              fetchMeasurementsForDb(selectedDb);
+            }
           } else {
             setSelectedDb('');
           }
@@ -393,50 +798,56 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
     return s;
   }, [measurements, tableColumns]);
 
+  // Static CodeMirror extensions — SQL compartment will be dynamically reconfigured
+  const staticExtensions = useMemo(() => [
+    sqlCompartment.of(sql({})),
+    aiGutterCompartment.of(createAiGutter()),
+    lineNumbers(),
+    aiGutterClickPlugin,
+  ], []);
+
+  // Dynamically update the SQL schema/table when cmSchema or expanded table changes
+  useEffect(() => {
+    const view = editorRef.current?.view;
+    if (view) {
+      const sqlConfig: SQLConfig = { schema: cmSchema };
+      if (activeTab.expandedTable) {
+        sqlConfig.defaultTable = activeTab.expandedTable;
+      }
+      view.dispatch({
+        effects: sqlCompartment.reconfigure(sql(sqlConfig))
+      });
+    }
+  }, [cmSchema, activeTab.expandedTable]);
+
+  // Dynamically show/hide the gutter error icon based on the latest query error
+  useEffect(() => {
+    const error = activeTab.queryResult?.error || null;
+    _currentError = error;
+    // 出错时记录对应的 SQL，成功时清空；lineMarker 据此只标注出错的语句
+    _erroredSql = error ? (activeTab.queryResult as any)?.erroredSql || null : null;
+    const view = editorRef.current?.view;
+    if (view) {
+      view.dispatch({
+        effects: aiGutterCompartment.reconfigure(createAiGutter())
+      });
+    }
+  }, [activeTab.queryResult]);
+
   // Fetch Measurements
   useEffect(() => {
     if (selectedDb && activeServer) {
-      const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, "");
-      fetch(`${baseUrl}/api/v1/databases/${selectedDb}/measurements`, {
-        headers: {
-          'Authorization': `Bearer ${activeServer.token}`
-        }
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data && data.measurements) {
-            setMeasurements(data.measurements);
-            // Optionally, prefetch schemas to power autocomplete instantly
-            data.measurements.forEach((m: MeasurementItem) => {
-              if (!tableColumns[m.name]) {
-                fetch(`${baseUrl}/api/v1/databases/${selectedDb}/measurements/${m.name}/schema`, {
-                  headers: { 'Authorization': `Bearer ${activeServer.token}` }
-                })
-                  .then(r => r.json())
-                  .then(schemaData => {
-                    if (schemaData.success) {
-                      const tags = schemaData.tags || [];
-                      const fields = schemaData.fields || [];
-                      const cols = ['time', ...tags, ...fields];
-                      if (cols.length > 0) {
-                        setTableColumns(prev => ({ ...prev, [m.name]: cols }));
-                        setTableSchemas(prev => ({ ...prev, [m.name]: { tags, fields } }));
-                      }
-                    }
-                  })
-                  .catch(() => { }); // silent catch for background prefetch
-              }
-            });
-          }
-        })
-        .catch(console.error);
+      fetchMeasurementsForDb(selectedDb);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDb, activeServer]);
 
   const updateSQL = (table: string | null, columns: string[], timeR: string, start?: string, end?: string) => {
-    let timeClause = `time >= now() - interval '${timeR}'`;
+    let timeClause = '';
 
-    if (timeR === 'custom') {
+    if (timeR === 'none') {
+      timeClause = '';
+    } else if (timeR === 'custom') {
       const conditions = [];
       if (start) {
         try { conditions.push(`time >= '${new Date(start).toISOString()}'`); } catch (e) { }
@@ -450,6 +861,8 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
       } else {
         timeClause = `time >= now() - interval '1 hour'`;
       }
+    } else {
+      timeClause = `time >= now() - interval '${timeR}'`;
     }
 
     const isNewTable = table && table !== activeTab.expandedTable;
@@ -461,13 +874,17 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
         // Option 2: Completely overwrite SQL when switching to a new table to avoid regex corruption
         if (isNewTable && table) {
           const colsStr = columns.length > 0 ? columns.join(',\n  ') : '*';
-          updatedCode = `SELECT\n  ${colsStr}\nFROM ${table}\nWHERE\n  ${timeClause}\nLIMIT 1000`;
+          updatedCode = timeClause
+            ? `SELECT\n  ${colsStr}\nFROM ${table}\nWHERE\n  ${timeClause}\nLIMIT 1000`
+            : `SELECT\n  ${colsStr}\nFROM ${table}\nLIMIT 1000`;
           return { ...t, queryCode: updatedCode };
         }
 
         if (!updatedCode && table) {
           const colsStr = columns.length > 0 ? columns.join(',\n  ') : '*';
-          updatedCode = `SELECT\n  ${colsStr}\nFROM ${table}\nWHERE\n  ${timeClause}\nLIMIT 1000`;
+          updatedCode = timeClause
+            ? `SELECT\n  ${colsStr}\nFROM ${table}\nWHERE\n  ${timeClause}\nLIMIT 1000`
+            : `SELECT\n  ${colsStr}\nFROM ${table}\nLIMIT 1000`;
           return { ...t, queryCode: updatedCode };
         }
 
@@ -492,7 +909,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
           if (updatedCode.match(/FROM\s+"?[a-zA-Z0-9_-]+"?(?=\s*(?:WHERE|LIMIT|$))/i)) {
             updatedCode = updatedCode.replace(/FROM\s+"?[a-zA-Z0-9_-]+"?(?=\s*(?:WHERE|LIMIT|$))/i, `FROM ${table}`);
           }
-          if (!updatedCode.includes('WHERE')) {
+          if (timeClause && !updatedCode.includes('WHERE')) {
             if (updatedCode.includes('LIMIT')) {
               updatedCode = updatedCode.replace(/LIMIT/i, `WHERE\n  ${timeClause}\nLIMIT`);
             } else {
@@ -506,13 +923,22 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
           let limitIndex = updatedCode.toUpperCase().indexOf('LIMIT', whereIndex);
           if (limitIndex === -1) limitIndex = updatedCode.length;
 
-          const head = updatedCode.substring(0, whereIndex + 5);
+          const head = updatedCode.substring(0, whereIndex);
           const tail = updatedCode.substring(limitIndex);
 
-          updatedCode = `${head}\n  ${timeClause}`;
-          if (tagFilters) updatedCode += `\n  AND ${tagFilters.replace(/^AND\s+/i, '')}`;
-          if (tail.trim()) updatedCode += `\n${tail.trimStart()}`;
-        } else {
+          const whereParts: string[] = [];
+          if (timeClause) whereParts.push(timeClause);
+          if (tagFilters) whereParts.push(tagFilters.replace(/^AND\s+/i, ''));
+
+          if (whereParts.length > 0) {
+            updatedCode = `${head}WHERE\n  ${whereParts.join('\n  AND ')}`;
+            if (tail.trim()) updatedCode += `\n${tail.trimStart()}`;
+          } else {
+            // No conditions — remove WHERE entirely
+            updatedCode = head.trimEnd();
+            if (tail.trim()) updatedCode += `\n${tail.trimStart()}`;
+          }
+        } else if (timeClause) {
           const limitIndex = updatedCode.toUpperCase().indexOf('LIMIT');
           if (limitIndex !== -1) {
             updatedCode = updatedCode.substring(0, limitIndex) + `WHERE\n  ${timeClause}\n` + updatedCode.substring(limitIndex);
@@ -536,22 +962,16 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
       updateSQL(tableName, [], activeTab.timeRange, activeTab.customStart, activeTab.customEnd);
 
       if (!tableColumns[tableName] && activeServer) {
-        const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, "");
-        fetch(`${baseUrl}/api/v1/databases/${selectedDb}/measurements/${tableName}/schema`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${activeServer.token}`
-          }
-        })
-          .then(r => r.json())
+        apiFetch(`/api/v1/databases/${selectedDb}/measurements/${tableName}/schema`)
           .then(data => {
-            if (data.success) {
-              const tags = data.tags || [];
-              const fields = data.fields || [];
+            if ((data as any).success) {
+              const tags = (data as any).tags || [];
+              const fields = (data as any).fields || [];
+              const types = (data as any).types || {};
               const cols = ['time', ...tags, ...fields];
               if (cols.length > 0) {
                 setTableColumns(prev => ({ ...prev, [tableName]: cols }));
-                setTableSchemas(prev => ({ ...prev, [tableName]: { tags, fields } }));
+                setTableSchemas(prev => ({ ...prev, [tableName]: { tags, fields, types } }));
               }
             }
           })
@@ -637,6 +1057,24 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
 
   const applyTimeRangeToQuery = (sql: string, timeRange: string, customStart?: string, customEnd?: string) => {
     if (!sql || !sql.trim()) return sql;
+
+    // "none" = remove all time conditions from existing SQL
+    if (timeRange === 'none') {
+      const intervalRegex = /time\s*>=\s*now\(\)\s*-\s*interval\s+'[^']+'/ig;
+      const customRegex = /time\s*>=\s*'[^']+'\s*AND\s*time\s*<=\s*'[^']+'/ig;
+
+      let result = sql.replace(intervalRegex, '___TIME_PH___');
+      result = result.replace(customRegex, '___TIME_PH___');
+      // Clean up dangling AND around placeholder
+      result = result.replace(/___TIME_PH___\s+AND\s+/gi, '');
+      result = result.replace(/\s+AND\s+___TIME_PH___/gi, '');
+      result = result.replace(/___TIME_PH___/gi, '');
+      // Remove empty WHERE clause
+      result = result.replace(/WHERE\s*\n?\s*LIMIT/gi, 'LIMIT');
+      result = result.replace(/WHERE\s*$/gi, '');
+      return result.replace(/\n\s*\n/g, '\n').trim();
+    }
+
     let timeCondition = '';
     if (timeRange === 'custom') {
       if (!customStart || !customEnd) return sql;
@@ -677,6 +1115,13 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
     }
   };
 
+  const handleFormatSql = () => {
+    const formatted = formatSql(activeTab.queryCode);
+    if (formatted !== activeTab.queryCode) {
+      updateActiveTab({ queryCode: formatted });
+    }
+  };
+
   const handleRunQuery = () => {
     const sql = activeTab.queryCode.trim();
     if (!sql || !activeServer) return;
@@ -686,182 +1131,107 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
       // Don't duplicate the very last query
       if (prev.length > 0 && prev[0].query === sql) return prev;
 
-      const newItem = { id: Date.now().toString(), query: sql, timestamp: Date.now() };
+      const newItem = { id: generateId(), query: sql, timestamp: Date.now() };
       const newHistory = [newItem, ...prev].slice(0, 50); // Keep top 50
       localStorage.setItem('queryHistory', JSON.stringify(newHistory));
       return newHistory;
     });
 
-    const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, "");
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${activeServer.token}`,
-    };
-    if (selectedDb) {
-      headers['x-iedb-database'] = selectedDb;
-    }
-    fetch(`${baseUrl}/api/v1/query`, {
+    apiFetch('/api/v1/query', {
       method: 'POST',
-      headers,
+      headers: selectedDb ? { 'x-iedb-database': selectedDb } : {},
       body: JSON.stringify({
         sql: activeTab.queryCode
       })
     })
-      .then(r => r.json())
-      .then((data: QueryResponse) => {
-        updateActiveTab({ queryResult: data, currentPage: 1 });
+      .then((data: any) => {
+        const result = data as QueryResponse;
+        // 后端返回错误时，记录出错的 SQL 以便 gutter 精确标注
+        if (!result.success && result.error) {
+          (result as any).erroredSql = sql;
+        }
+        updateActiveTab({ queryResult: result, currentPage: 1 });
         setIsQuerying(false);
       })
       .catch(err => {
         console.error(err);
+        updateActiveTab({
+          queryResult: { success: false, error: err?.message || String(err), erroredSql: sql } as QueryResponse,
+          currentPage: 1,
+        });
         setIsQuerying(false);
       });
   };
 
-  const handleGenerateSQL = async () => {
-    if (!nlQuery.trim() || !activeServer) return;
-
-    const provider = localStorage.getItem('iotedge-ai-provider') || 'lmstudio';
-    const apiKey = localStorage.getItem('iotedge-ai-apikey') || '';
-    const baseUrl = localStorage.getItem('iotedge-ai-baseurl') || 'http://localhost:1234/v1';
-    const customInstructions = localStorage.getItem('iotedge-ai-instructions') || '';
-
-    if (!baseUrl) {
-      alert(t('views.dataExplorer.aiProviderBaseUrlMissing'));
-      return;
-    }
-
-    if (!selectedDb) {
-      alert(t('views.dataExplorer.selectDatabaseFirst'));
-      return;
-    }
-
-    setIsGeneratingSql(true);
-
-    try {
-      const baseUrl = serverBaseUrl(activeServer.protocol, activeServer.host);
-
-      // 1. Get or Build Schema Snapshot
-      let schemaSnapshot = schemaCacheRef.current[selectedDb];
-
-      if (!schemaSnapshot) {
-        // Fetch all measurements
-        const measurementsRes = await fetch(`${baseUrl}/api/v1/databases/${encodeURIComponent(selectedDb)}/measurements`, {
-          headers: { 'Authorization': `Bearer ${activeServer.token}` }
-        });
-        const measurementsData = await measurementsRes.json();
-        const measurementsList = measurementsData.measurements || [];
-
-        schemaSnapshot = {
-          database: selectedDb,
-          measurements: [] as any[]
-        };
-
-        // Fetch columns for all measurements in parallel
-        await Promise.all(measurementsList.map(async (m: { name: string }) => {
-          try {
-            const queryRes = await fetch(`${baseUrl}/api/v1/query`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${activeServer.token}`,
-                'x-iedb-database': selectedDb
-              },
-              body: JSON.stringify({
-                sql: `SELECT * FROM ${m.name} LIMIT 1`
-              })
-            });
-            const data = await queryRes.json();
-            if (data.success && data.columns) {
-              schemaSnapshot.measurements.push({
-                name: m.name,
-                columns: data.columns.filter((c: string) => c !== 'row_id')
-              });
-            } else {
-              schemaSnapshot.measurements.push({ name: m.name, columns: [] });
-            }
-          } catch (e) {
-            schemaSnapshot.measurements.push({ name: m.name, columns: [] });
-          }
-        }));
-
-        schemaCacheRef.current[selectedDb] = schemaSnapshot;
+  // Global Mod+Enter shortcut to run query regardless of focus
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleRunQuery();
       }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [handleRunQuery]);
 
-      // 2. Build Prompt Matches
-      const systemPrompt = `You are an NL2SQL assistant for IotEdge DB (DuckDB/InfluxDB SQL compatible). You MUST call tools to get schema/context before generating SQL. Only output SQL, no markdown, no explanation. Only SELECT is allowed.`;
-
-      let userPrompt = `Database: ${selectedDb}\n\n`;
-
-      if (customInstructions) {
-        userPrompt += `User Custom Instructions:\n${customInstructions}\n\n`;
-      }
-
-      userPrompt += `Important Rule: 单表列引用规则。当查询只有一张表（无 JOIN）时，列名不要加表名前缀。例如写 AVG(usage)，不要写 AVG(cpu.usage)。\n\n`;
-
-      userPrompt += `Schema:\n${JSON.stringify(schemaSnapshot, null, 2)}\n\n`;
-      userPrompt += `Question: ${nlQuery}\n\nNow output one SELECT SQL only.`;
-
-      let modelId = localStorage.getItem('iotedge-ai-model') || 'local-model';
-      if (!localStorage.getItem('iotedge-ai-model')) {
-        if (provider === 'openai') modelId = 'gpt-5.5';
-        else if (provider === 'qwen') modelId = 'qwen3.7-max';
-        else if (provider === 'deepseek') modelId = 'deepseek-v4-flash';
-        else if (provider === 'zhipu') modelId = 'glm-5.2';
-        else if (provider === 'moonshot') modelId = 'kimi-k2.7-code';
-        else if (provider === 'doubao') modelId = 'doubao-pro-32k';
-        else if (provider === 'tencent-hunyuan') modelId = 'hunyuan-turbos-latest';
-        else if (provider === 'baidu-qianfan') modelId = 'ernie-4.0';
-        else if (provider === 'iflytek-spark') modelId = '4.0Ultra';
-      }
-
-      const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {})
-        },
-        body: JSON.stringify({
-          model: modelId,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      let generatedSql = data.choices?.[0]?.message?.content || '';
-
-      // Cleanup markdown artifacts
-      generatedSql = generatedSql.trim();
-      if (generatedSql.startsWith('\`\`\`sql')) {
-        generatedSql = generatedSql.substring(6);
-      } else if (generatedSql.startsWith('\`\`\`')) {
-        generatedSql = generatedSql.substring(3);
-      }
-      if (generatedSql.endsWith('\`\`\`')) {
-        generatedSql = generatedSql.substring(0, generatedSql.length - 3);
-      }
-      generatedSql = generatedSql.trim();
-
-      updateActiveTab({ queryCode: generatedSql });
-
-    } catch (err: any) {
-      console.error(err);
-      alert(t('views.dataExplorer.failedToGenerateSql', { error: err?.message || '' }));
-    } finally {
-      setIsGeneratingSql(false);
-    }
+  // ---- AI Query Panel callbacks ----
+  const handleAiInsertToEditor = (sql: string) => {
+    updateActiveTab({ queryCode: sql });
   };
 
+  const handleAiRunQuery = (sql: string) => {
+    const trimmed = sql.trim();
+    // 与 handleRunQuery 保持一致的前置校验：无 server 或空 SQL 时不发起请求
+    if (!trimmed || !activeServer) return;
+    // 捕获发起查询时的 tabId，确保异步结果写回正确的 tab，避免用户切换 tab 后结果错位
+    const targetTabId = activeTabIdRef.current;
+    const db = selectedDbRef.current;
+    setIsQuerying(true);
+
+    setQueryHistory(prev => {
+      if (prev.length > 0 && prev[0].query === trimmed) return prev;
+      const newItem = { id: generateId(), query: trimmed, timestamp: Date.now() };
+      const newHistory = [newItem, ...prev].slice(0, 50);
+      localStorage.setItem('queryHistory', JSON.stringify(newHistory));
+      return newHistory;
+    });
+
+    apiFetch('/api/v1/query', {
+      method: 'POST',
+      headers: db ? { 'x-iedb-database': db } : {},
+      body: JSON.stringify({ sql: trimmed })
+    })
+      .then((data: any) => {
+        const result = data as QueryResponse;
+        if (!result.success && result.error) {
+          (result as any).erroredSql = trimmed;
+        }
+        updateActiveTab({ queryResult: result, currentPage: 1 }, targetTabId);
+        setIsQuerying(false);
+      })
+      .catch(err => {
+        console.error(err);
+        // 将错误信息写入结果栏，避免结果区停留在上一次查询的结果
+        updateActiveTab({
+          queryResult: { success: false, error: err?.message || String(err), erroredSql: trimmed } as QueryResponse,
+          currentPage: 1,
+        }, targetTabId);
+        setIsQuerying(false);
+      });
+  };
+
+  // Keep the gutter run-button callback in sync so it always calls the latest executor.
+  // 使用 ref 存储最新函数引用，确保 gutter 的同步 mousedown 事件不会命中过期的闭包。
+  const handleAiRunQueryRef = useRef(handleAiRunQuery);
+  handleAiRunQueryRef.current = handleAiRunQuery;
+  useEffect(() => {
+    _onRunGutterClick = (sql: string) => handleAiRunQueryRef.current(sql);
+    return () => { _onRunGutterClick = null; };
+  }, []);
+
   const handleAddTab = () => {
-    const newId = Date.now().toString();
+    const newId = generateId();
     setTabs(prev => [
       ...prev,
       {
@@ -871,7 +1241,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
         queryResult: null,
         expandedTable: null,
         selectedColumns: [],
-        timeRange: '1 hour',
+        timeRange: 'none',
         customStart: '',
         customEnd: '',
         visualization: 'table',
@@ -948,11 +1318,11 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
     }
 
     const newCell = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: generateId(),
       name: cellName,
       type: saveCellType,
       queries: [{
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: generateId(),
         text: activeTab.queryCode,
         database: saveSelectedDb
       }],
@@ -964,7 +1334,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
 
     let targetId = saveDashboardId;
     if (!targetId) {
-      targetId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      targetId = generateId();
     }
 
     if (editingCellIdRef.current && editingDashboardIdRef.current) {
@@ -980,7 +1350,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
               name: cellName,
               type: saveCellType,
               queries: [{
-                id: c.queries?.[0]?.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                id: c.queries?.[0]?.id || generateId(),
                 text: activeTab.queryCode,
                 database: saveSelectedDb
               }]
@@ -999,7 +1369,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
         createdAt: Date.now(),
         updatedAt: Date.now(),
         cells: [newCell],
-        timeRange: '1 hour',
+        timeRange: 'none',
         autoRefresh: 0
       });
     } else {
@@ -1078,11 +1448,11 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
 
         <div className="schema-search" style={{ marginTop: '8px' }}>
           <Search size={14} className="input-icon" />
-          <input type="text" placeholder={t('views.dataExplorer.searchTablesPlaceholder')} className="table-search" />
+          <input type="text" placeholder={t('views.dataExplorer.searchTablesPlaceholder')} className="table-search" value={tableSearch} onChange={(e) => setTableSearch(e.target.value)} />
         </div>
 
         <div className="schema-tree">
-          {measurements.map(m => (
+          {measurements.filter(m => m.name.toLowerCase().includes(tableSearch.toLowerCase())).map(m => (
             <React.Fragment key={m.name}>
               <div
                 className={`tree-item ${activeTab.expandedTable === m.name ? 'active' : ''}`}
@@ -1094,22 +1464,23 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
                 <div className="tree-children">
                   {tableColumns[m.name] ? (
                     tableColumns[m.name].map(col => {
-                      const schema = tableSchemas[m.name] || { tags: [], fields: [] };
+                      const schema = tableSchemas[m.name] || { tags: [], fields: [], types: {} };
                       const isTime = col === 'time';
                       const isTag = schema.tags.includes(col);
                       const isField = schema.fields.includes(col) || (!isTime && !isTag);
+                      const colType = schema.types?.[col] || (isTime ? 'timestamp' : isTag ? 'string' : '');
 
                       return isTag ? (
                         <div key={col} style={{ position: 'relative' }}>
                           <TagDropdown
                             tableName={m.name}
                             columnName={col}
-                            activeServer={activeServer}
                             selectedDb={selectedDb}
                             initialChecked={getSelectedTagValues(activeTab.queryCode, col)}
                             onSelectValue={(val: string[]) => handleTagValueSelect(col, val)}
+                            trailing={colType && <span className="col-type-badge" data-type={colType} title={colType}>{colType}</span>}
                           >
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', minWidth: 0, overflow: 'hidden' }}>
                               <input
                                 type="checkbox"
                                 checked={activeTab.selectedColumns.includes(col)}
@@ -1117,13 +1488,13 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
                                 onClick={(e) => e.stopPropagation()}
                               />
                               <Tag size={12} color="var(--text-secondary)" style={{ flexShrink: 0 }} />
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={col}>{col}</span>
+                              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={col}>{col}</span>
                             </label>
                           </TagDropdown>
                         </div>
                       ) : (
-                        <div key={col} className="tree-leaf" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div key={col} className="tree-leaf" style={{ display: 'flex', alignItems: 'center', gap: '4px', paddingRight: '8px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', minWidth: 0, overflow: 'hidden' }}>
                             <input
                               type="checkbox"
                               checked={activeTab.selectedColumns.includes(col)}
@@ -1132,8 +1503,9 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
                             />
                             {isTime && <Clock size={12} color="var(--text-secondary)" style={{ flexShrink: 0 }} />}
                             {isField && <Hash size={12} color="var(--text-secondary)" style={{ flexShrink: 0 }} />}
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={col}>{col}</span>
+                            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={col}>{col}</span>
                           </label>
+                          {colType && <span className="col-type-badge" data-type={colType} title={colType}>{colType}</span>}
                         </div>
                       );
                     })
@@ -1155,119 +1527,108 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
       {/* Query Workspace */}
       <div className="query-workspace">
         <div className="query-tabs">
-          {tabs.map(tab => (
-            <div
-              key={tab.id}
-              className={`tab ${activeTabId === tab.id ? 'active' : ''}`}
-              onClick={() => setActiveTabId(tab.id)}
+          <div className="query-tabs-scroll">
+            {tabs.map(tab => (
+              <div
+                key={tab.id}
+                className={`tab ${activeTabId === tab.id ? 'active' : ''}`}
+                onClick={() => setActiveTabId(tab.id)}
+              >
+                <span>{t('views.dataExplorer.queryTabTitle', { count: tab.count })}</span>
+                {tabs.length > 1 && (
+                  <button
+                    type="button"
+                    className="icon-btn-small tab-delete-btn"
+                    title="Delete tab"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteTab(tab.id);
+                    }}
+                    aria-label="Delete tab"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button className="icon-btn-small" onClick={handleAddTab}><Plus size={16} /></button>
+          </div>
+
+          <div className="query-tabs-actions">
+            <button
+              className="icon-btn ai-query-btn"
+              title={t('views.dataExplorer.aiAssistant')}
+              onClick={() => setShowAiPanel(true)}
             >
-              <span>{t('views.dataExplorer.queryTabTitle', { count: tab.count })}</span>
-              {tabs.length > 1 && (
-                <button
-                  type="button"
-                  className="icon-btn-small tab-delete-btn"
-                  title="Delete tab"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteTab(tab.id);
-                  }}
-                  aria-label="Delete tab"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          ))}
-          <button className="icon-btn-small" style={{ marginBottom: '6px' }} onClick={handleAddTab}><Plus size={16} /></button>
+              <Sparkles size={14} />
+              <span>{t('views.dataExplorer.aiAssistant')}</span>
+            </button>
 
-          <div style={{ flex: 1 }}></div>
-
-          <button
-            className="icon-btn history-btn"
-            title={t('views.dataExplorer.queryHistoryTitle')}
-            onClick={() => { setShowDrawer(true); setDrawerTab('history'); }}
-            style={{ marginRight: '6px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}
-          >
-            <History size={14} />
-            <span style={{ fontSize: '13px' }}>{t('views.dataExplorer.historyButton')}</span>
-          </button>
+            <button
+              className="icon-btn history-btn"
+              title={t('views.dataExplorer.queryHistoryTitle')}
+              onClick={() => { setShowDrawer(true); setDrawerTab('history'); }}
+            >
+              <History size={14} />
+              <span>{t('views.dataExplorer.historyButton')}</span>
+            </button>
+          </div>
         </div>
 
         <div className="query-toolbar">
-          <div className="query-modes">
-            <button
-              className={`mode-btn ${queryMode === 'sql' ? 'active' : ''}`}
-              onClick={() => setQueryMode('sql')}
-            >
-              {t('views.dataExplorer.sql')}
-            </button>
-            <button
-              className={`mode-btn ${queryMode === 'nl' ? 'active' : ''}`}
-              onClick={() => setQueryMode('nl')}
-            >
-              {t('views.dataExplorer.naturalLanguage')}
-            </button>
-          </div>
+          <button
+            className="btn btn-primary run-query"
+            onClick={handleRunQuery}
+            disabled={isQuerying || isLoadingDbs || isRefreshingDbs}
+            title={`${t('views.dataExplorer.runQuery')} (${isMac ? '⌘' : 'Ctrl'}+Enter)`}
+          >
+            <Play size={16} />
+            {t('views.dataExplorer.runQuery')}
+            <span className="run-query-kbd">
+              {isMac ? <Command size={13} /> : <span className="kbd-ctrl-text">Ctrl</span>}
+              <CornerDownLeft size={13} />
+            </span>
+          </button>
 
           <div className="query-actions">
-            {queryMode !== 'nl' && (
-              <select
-                className="time-range"
-                value={activeTab.timeRange}
-                onChange={(e) => handleTimeRangeChange(e.target.value)}
-              >
-                <option value="15 minutes">{t('views.dataExplorer.past15m')}</option>
-                <option value="1 hour">{t('views.dataExplorer.past1h')}</option>
-                <option value="6 hours">{t('views.dataExplorer.past6h')}</option>
-                <option value="24 hours">{t('views.dataExplorer.past24h')}</option>
-                <option value="7 days">{t('views.dataExplorer.past7d')}</option>
-                <option value="30 days">{t('views.dataExplorer.past30d')}</option>
-                <option value="custom">{t('views.dataExplorer.custom')}</option>
-              </select>
-            )}
-
-            {queryMode === 'nl' && (
-              <button
-                className="btn btn-primary"
-                onClick={handleGenerateSQL}
-                disabled={isGeneratingSql || !nlQuery.trim()}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                {isGeneratingSql ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} fill="white" />}
-                {t('views.dataExplorer.generateSql')}
-              </button>
-            )}
+            <select
+              className="time-range"
+              value={activeTab.timeRange}
+              onChange={(e) => handleTimeRangeChange(e.target.value)}
+            >
+              <option value="15 minutes">{t('views.dataExplorer.past15m')}</option>
+              <option value="1 hour">{t('views.dataExplorer.past1h')}</option>
+              <option value="6 hours">{t('views.dataExplorer.past6h')}</option>
+              <option value="24 hours">{t('views.dataExplorer.past24h')}</option>
+              <option value="7 days">{t('views.dataExplorer.past7d')}</option>
+              <option value="30 days">{t('views.dataExplorer.past30d')}</option>
+              <option value="none">{t('views.dataExplorer.allTime')}</option>
+              <option value="custom">{t('views.dataExplorer.custom')}</option>
+            </select>
 
             <button
-              className="btn btn-primary run-query"
-              onClick={handleRunQuery}
-              disabled={isQuerying || isLoadingDbs || isRefreshingDbs}
+              className="btn btn-outlined run-query"
+              onClick={handleFormatSql}
+              title={t('views.dataExplorer.formatSql')}
+              disabled={!activeTab.queryCode.trim()}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}
             >
-              {isQuerying ? <Loader2 size={16} className="spin" /> : <Play size={16} fill="white" />}
-              {t('views.dataExplorer.runQuery')}
+              <AlignLeft size={16} />
+              {t('views.dataExplorer.formatSql')}
             </button>
+
           </div>
         </div>
 
-        {queryMode === 'nl' && (
-          <div className="nl-query-container">
-            <textarea
-              className="nl-textarea"
-              placeholder={t('views.dataExplorer.askPlaceholder')}
-              value={nlQuery}
-              onChange={(e) => setNlQuery(e.target.value)}
-              disabled={isGeneratingSql}
-            />
-          </div>
-        )}
-
-        <div className="query-editor-area">
+        <div className="query-editor-area" ref={editorAreaRef}>
           <CodeMirror
+            ref={editorRef}
             value={activeTab.queryCode}
             height="100%"
             theme={vscodeDark}
-            extensions={[sql({ schema: cmSchema })]}
-            onChange={(value) => updateActiveTab({ queryCode: value })}
+            basicSetup={{ foldGutter: false, lineNumbers: false }}
+            extensions={staticExtensions}
+            onChange={(value) => { updateActiveTab({ queryCode: value }); }}
             className="code-editor-cm"
           />
         </div>
@@ -1634,9 +1995,9 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
       )}
 
       {/* Query History & Favorites Drawer */}
-      {showDrawer && (
-        <div className="drawer-overlay" onClick={() => setShowDrawer(false)}>
-          <div className="drawer-content" onClick={e => e.stopPropagation()}>
+      {drawerAnim !== 'hidden' && (
+        <div className={`drawer-overlay drawer-overlay-${drawerAnim}`} onClick={() => setShowDrawer(false)}>
+          <div className={`drawer-content drawer-content-${drawerAnim}`} onClick={e => e.stopPropagation()}>
             <div className="drawer-header">
               <h3>{t('views.dataExplorer.queryHistoryTitle')}</h3>
               <button className="icon-btn" onClick={() => setShowDrawer(false)}>
@@ -1669,7 +2030,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
                       <div key={item.id} className="history-item">
                         <div className="history-item-header">
                           <div className="history-time">
-                            {new Date(item.timestamp).toLocaleString(i18n.language)}
+                            {formatTime(item.timestamp, i18n.language)}
                           </div>
                           <div className="history-item-actions">
                             <button
@@ -1706,7 +2067,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
                       <div key={item.id} className="history-item">
                         <div className="history-item-header">
                           <div className="history-time">
-                            {new Date(item.timestamp).toLocaleString(i18n.language)}
+                            {formatTime(item.timestamp, i18n.language)}
                           </div>
                           <div className="history-item-actions">
                             <button
@@ -1760,6 +2121,35 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
           </div>
         </div>
       )}
+
+      {/* AI Query Assistant Panel */}
+      <AiQueryPanel
+        open={showAiPanel}
+        onClose={() => {
+          setShowAiPanel(false);
+          setAiPresetQuestion(undefined);
+          setAiPresetInput(undefined);
+          setAiSqlContext(undefined);
+          setAiErrorContext(undefined);
+        }}
+        selectedDb={selectedDb}
+        databases={databases}
+        tableSchemas={tableSchemas}
+        measurements={measurements}
+        onInsertToEditor={handleAiInsertToEditor}
+        onRunQuery={handleAiRunQuery}
+        editorSql={activeTab.queryCode}
+        onAcceptSql={(sql: string) => {
+          updateActiveTab({ queryCode: sql });
+        }}
+        presetQuestion={aiPresetQuestion}
+        presetInput={aiPresetInput}
+        sqlContext={aiSqlContext}
+        onClearSqlContext={() => setAiSqlContext(undefined)}
+        errorContext={aiErrorContext}
+        onClearErrorContext={() => setAiErrorContext(undefined)}
+        onNavigateToIntegrations={() => onNavigate?.('integrations')}
+      />
     </div>
   );
 };

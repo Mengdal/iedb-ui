@@ -140,7 +140,6 @@
 
 /* Advanced Metrics */
 .advanced-metrics-container {
-  margin-top: 48px;
   border-top: 1px dashed var(--border-color);
   padding-top: 32px;
 }

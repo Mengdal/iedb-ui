@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useServers } from '../contexts/ServerContext';
-import { serverBaseUrl } from '../utils/server';
+import { serverBaseUrl, serverFetch } from '../utils/server';
 
 interface FeatureGate {
   noLicense: boolean;
@@ -23,23 +23,18 @@ export function useApiFetch(options: ApiFetchOptions = {}) {
   const { activeServer } = useServers();
 
   const [gate, setGate] = useState<FeatureGate>({ noLicense: false, featureNotEnabled: false });
+  const gateRef = useRef(gate);
+  gateRef.current = gate;
 
   const baseUrl = useMemo(() => {
     if (!activeServer) return '';
     return serverBaseUrl(activeServer.protocol, activeServer.host);
   }, [activeServer]);
 
-  const apiFetch = async (path: string, init?: RequestInit) => {
+  const apiFetch = useCallback(async (path: string, init?: RequestInit & { raw?: boolean }) => {
     if (!activeServer) throw new Error('No active server');
 
-    const res = await fetch(`${baseUrl}${path}`, {
-      ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${activeServer.token}`,
-        ...(init?.headers || {}),
-      },
-    });
+    const res = await serverFetch(baseUrl, path, init, activeServer.token);
 
     if (handleLicense && (res.status === 403 || res.status === 503)) {
       setGate({ noLicense: true, featureNotEnabled: false });
@@ -49,6 +44,7 @@ export function useApiFetch(options: ApiFetchOptions = {}) {
       setGate({ noLicense: false, featureNotEnabled: true });
       return null;
     }
+    if (init?.raw) return res;
     if (res.status === 204) return null;
 
     const data = await res.json().catch(() => ({}));
@@ -56,9 +52,22 @@ export function useApiFetch(options: ApiFetchOptions = {}) {
       throw new Error((data as any)?.error || `Request failed: ${res.status}`);
     }
     return data;
-  };
+  }, [baseUrl, activeServer, handleLicense, handleFeature]);
 
-  const resetGate = () => setGate({ noLicense: false, featureNotEnabled: false });
+  const apiJson = useCallback(async (path: string, init?: RequestInit) => {
+    const data = await apiFetch(path, init);
+    if (data === null) {
+      const currentGate = gateRef.current;
+      throw new Error(
+        currentGate.noLicense ? 'No valid license' :
+        currentGate.featureNotEnabled ? 'Feature not enabled' :
+        'Request returned empty response'
+      );
+    }
+    return data;
+  }, [apiFetch]);
 
-  return { apiFetch, baseUrl, activeServer, ...gate, resetGate };
+  const resetGate = useCallback(() => setGate({ noLicense: false, featureNotEnabled: false }), []);
+
+  return { apiFetch, apiJson, baseUrl, activeServer, ...gate, resetGate };
 }

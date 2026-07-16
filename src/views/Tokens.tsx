@@ -14,7 +14,9 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useServers } from '../contexts/ServerContext';
-import { serverBaseUrl } from '../utils/server';
+import { useApiFetch } from '../hooks/useApiFetch';
+import { copyToClipboard } from '../utils/clipboard';
+import { formatTime } from '../utils/formatTime';
 import './Tokens.css';
 
 export interface TokenInfo {
@@ -32,18 +34,6 @@ const PERM_OPTIONS = ['read', 'write', 'delete', 'admin'] as const;
 
 type PermMode = 'default' | 'custom' | 'rbac';
 
-function formatTs(iso?: string, locale?: string) {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleString(locale, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-  } catch {
-    return iso;
-  }
-}
-
 function permModeFromToken(t: TokenInfo): PermMode {
   if (!t.permissions?.length) return 'rbac';
   const s = new Set(t.permissions);
@@ -54,6 +44,7 @@ function permModeFromToken(t: TokenInfo): PermMode {
 export default function Tokens() {
   const { t, i18n } = useTranslation();
   const { activeServer } = useServers();
+  const { apiFetch, resetGate } = useApiFetch({ handleLicense: false, handleFeature: true });
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,39 +58,30 @@ export default function Tokens() {
 
   const [secret, setSecret] = useState<{ title: string; value: string } | null>(null);
 
-  const authHeaders = useMemo(
-    () =>
-      activeServer
-        ? { Authorization: `Bearer ${activeServer.token}`, 'Content-Type': 'application/json' as const }
-        : null,
-    [activeServer]
-  );
+
 
   const fetchTokens = useCallback(async () => {
-    if (!activeServer || !authHeaders) return;
+    if (!activeServer) return;
     setLoading(true);
     setError(null);
+    resetGate();
     try {
-      const base = serverBaseUrl(activeServer.protocol, activeServer.host);
-      const res = await fetch(`${base}/api/v1/auth/tokens`, { headers: authHeaders });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError((data as { error?: string }).error || res.statusText || 'Failed to load tokens');
+      const data = await apiFetch('/api/v1/auth/tokens');
+      if (data === null) {
+        setError(t('views.tokens.authFeatureNotEnabled'));
         setTokens([]);
-        return;
-      }
-      if (data.success && Array.isArray(data.tokens)) {
+      } else if (data.success && Array.isArray(data.tokens)) {
         setTokens(data.tokens);
       } else {
         setTokens([]);
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Network error');
+    } catch (e: any) {
+      setError(e.message || 'Network error');
       setTokens([]);
     } finally {
       setLoading(false);
     }
-  }, [activeServer, authHeaders]);
+  }, [activeServer, apiFetch, resetGate, t]);
 
   useEffect(() => {
     fetchTokens();
@@ -116,11 +98,7 @@ export default function Tokens() {
   }, [tokens, search]);
 
   const copySecret = async (value: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-    } catch {
-      // ignore
-    }
+    await copyToClipboard(value);
   };
 
   return (
@@ -230,9 +208,9 @@ export default function Tokens() {
                         {item.enabled ? t('views.tokens.active') : t('views.tokens.revoked')}
                       </span>
                     </td>
-                    <td>{formatTs(item.created_at, i18n.language)}</td>
-                    <td>{formatTs(item.last_used_at, i18n.language)}</td>
-                    <td>{formatTs(item.expires_at, i18n.language)}</td>
+                    <td>{formatTime(item.created_at, i18n.language)}</td>
+                    <td>{formatTime(item.last_used_at, i18n.language)}</td>
+                    <td>{formatTime(item.expires_at, i18n.language)}</td>
                     <td>
                       <div className="token-actions">
                         <button type="button" className="btn btn-ghost btn-small" onClick={() => setEditToken(item)}>
@@ -271,10 +249,8 @@ export default function Tokens() {
         )}
       </div>
 
-      {createOpen && activeServer && authHeaders && (
+      {createOpen && (
         <CreateTokenModal
-          baseUrl={serverBaseUrl(activeServer.protocol, activeServer.host)}
-          headers={authHeaders}
           onClose={() => setCreateOpen(false)}
           onCreated={(plainToken) => {
             setCreateOpen(false);
@@ -287,11 +263,9 @@ export default function Tokens() {
         />
       )}
 
-      {editToken && activeServer && authHeaders && (
+      {editToken && (
         <EditTokenModal
           token={editToken}
-          baseUrl={serverBaseUrl(activeServer.protocol, activeServer.host)}
-          headers={authHeaders}
           onClose={() => setEditToken(null)}
           onSaved={() => {
             setEditToken(null);
@@ -328,7 +302,7 @@ export default function Tokens() {
         </div>
       )}
 
-      {deleteId !== null && activeServer && authHeaders && (
+      {deleteId !== null && (
         <ConfirmModal
           title={t('views.tokens.deleteToken')}
           description={t('views.tokens.deleteTokenDesc')}
@@ -336,24 +310,19 @@ export default function Tokens() {
           danger
           onCancel={() => setDeleteId(null)}
           onConfirm={async () => {
-            const base = serverBaseUrl(activeServer.protocol, activeServer.host);
-            const res = await fetch(`${base}/api/v1/auth/tokens/${deleteId}`, {
-              method: 'DELETE',
-              headers: authHeaders,
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-              setError((data as { error?: string }).error || t('views.tokens.deleteFailed'));
+            try {
+              await apiFetch(`/api/v1/auth/tokens/${deleteId}`, { method: 'DELETE' });
               setDeleteId(null);
-              return;
+              fetchTokens();
+            } catch (e: any) {
+              setError(e.message || t('views.tokens.deleteFailed'));
+              setDeleteId(null);
             }
-            setDeleteId(null);
-            fetchTokens();
           }}
         />
       )}
 
-      {revokeId !== null && activeServer && authHeaders && (
+      {revokeId !== null && (
         <ConfirmModal
           title={t('views.tokens.revokeToken')}
           description={t('views.tokens.revokeTokenDesc')}
@@ -361,46 +330,36 @@ export default function Tokens() {
           danger
           onCancel={() => setRevokeId(null)}
           onConfirm={async () => {
-            const base = serverBaseUrl(activeServer.protocol, activeServer.host);
-            const res = await fetch(`${base}/api/v1/auth/tokens/${revokeId}/revoke`, {
-              method: 'POST',
-              headers: authHeaders,
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-              setError((data as { error?: string }).error || t('views.tokens.revokeFailed'));
+            try {
+              await apiFetch(`/api/v1/auth/tokens/${revokeId}/revoke`, { method: 'POST' });
               setRevokeId(null);
-              return;
+              fetchTokens();
+            } catch (e: any) {
+              setError(e.message || t('views.tokens.revokeFailed'));
+              setRevokeId(null);
             }
-            setRevokeId(null);
-            fetchTokens();
           }}
         />
       )}
 
-      {rotateId !== null && activeServer && authHeaders && (
+      {rotateId !== null && (
         <ConfirmModal
           title={t('views.tokens.rotateToken')}
           description={t('views.tokens.rotateTokenDesc')}
           confirmLabel={t('views.tokens.rotate')}
           onCancel={() => setRotateId(null)}
           onConfirm={async () => {
-            const base = serverBaseUrl(activeServer.protocol, activeServer.host);
-            const res = await fetch(`${base}/api/v1/auth/tokens/${rotateId}/rotate`, {
-              method: 'POST',
-              headers: authHeaders,
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-              setError((data as { error?: string }).error || t('views.tokens.rotateFailed'));
+            try {
+              const data = await apiFetch(`/api/v1/auth/tokens/${rotateId}/rotate`, { method: 'POST' });
+              const plain = (data as { new_token?: string })?.new_token;
               setRotateId(null);
-              return;
-            }
-            const plain = (data as { new_token?: string }).new_token;
-            setRotateId(null);
-            fetchTokens();
-            if (plain) {
-              setSecret({ title: t('views.tokens.newTokenSecret'), value: plain });
+              fetchTokens();
+              if (plain) {
+                setSecret({ title: t('views.tokens.newTokenSecret'), value: plain });
+              }
+            } catch (e: any) {
+              setError(e.message || t('views.tokens.rotateFailed'));
+              setRotateId(null);
             }
           }}
         />
@@ -410,17 +369,14 @@ export default function Tokens() {
 }
 
 function CreateTokenModal({
-  baseUrl,
-  headers,
   onClose,
   onCreated,
 }: {
-  baseUrl: string;
-  headers: Record<string, string>;
   onClose: () => void;
   onCreated: (plain: string) => void;
 }) {
   const { t } = useTranslation();
+  const { apiFetch } = useApiFetch({ handleLicense: false, handleFeature: true });
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [permMode, setPermMode] = useState<PermMode>('default');
@@ -457,17 +413,11 @@ function CreateTokenModal({
         body.permissions = picked;
       }
 
-      const res = await fetch(`${baseUrl}/api/v1/auth/tokens`, {
+      const data = await apiFetch('/api/v1/auth/tokens', {
         method: 'POST',
-        headers,
         body: JSON.stringify(body),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setLocalErr((data as { error?: string }).error || t('views.tokens.createFailed'));
-        return;
-      }
-      const plain = (data as { token?: string }).token;
+      const plain = (data as { token?: string })?.token;
       if (typeof plain === 'string') {
         onCreated(plain);
       } else {
@@ -564,18 +514,15 @@ function CreateTokenModal({
 
 function EditTokenModal({
   token,
-  baseUrl,
-  headers,
   onClose,
   onSaved,
 }: {
   token: TokenInfo;
-  baseUrl: string;
-  headers: Record<string, string>;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { t } = useTranslation();
+  const { apiFetch } = useApiFetch({ handleLicense: false, handleFeature: true });
   const [name, setName] = useState(token.name);
   const [description, setDescription] = useState(token.description || '');
   const [permMode, setPermMode] = useState<PermMode>(() => permModeFromToken(token));
@@ -610,16 +557,10 @@ function EditTokenModal({
         body.expires_in = expiresIn;
       }
 
-      const res = await fetch(`${baseUrl}/api/v1/auth/tokens/${token.id}`, {
+      await apiFetch(`/api/v1/auth/tokens/${token.id}`, {
         method: 'PATCH',
-        headers,
         body: JSON.stringify(body),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setLocalErr((data as { error?: string }).error || t('views.tokens.updateFailed'));
-        return;
-      }
       onSaved();
     } catch (err) {
       setLocalErr(err instanceof Error ? err.message : t('views.tokens.requestFailed'));

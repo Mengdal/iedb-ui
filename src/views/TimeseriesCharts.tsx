@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useTranslation } from 'react-i18next';
 import { useServers } from '../contexts/ServerContext';
+import { useApiFetch } from '../hooks/useApiFetch';
+import { usePolling } from '../hooks/usePolling';
 import './TimeseriesCharts.css';
 
 interface TimeseriesPoint {
@@ -83,51 +85,35 @@ const buildChartOption = (title: string, data: TimeseriesPoint[], noDataText: st
 const TimeseriesCharts: React.FC = () => {
   const { t } = useTranslation();
   const { activeServer } = useServers();
+  const { apiFetch } = useApiFetch({ handleLicense: false, handleFeature: false });
   const [systemData, setSystemData] = useState<TimeseriesPoint[]>([]);
   const [apiData, setApiData] = useState<TimeseriesPoint[]>([]);
   const [appData, setAppData] = useState<TimeseriesPoint[]>([]);
 
-  useEffect(() => {
+  const fetchData = React.useCallback(async () => {
     if (!activeServer) return;
+    try {
+      const [sysRes, apiRes, appRes] = await Promise.all([
+        apiFetch('/api/v1/metrics/timeseries/system').catch(() => null),
+        apiFetch('/api/v1/metrics/timeseries/api').catch(() => null),
+        apiFetch('/api/v1/metrics/timeseries/application').catch(() => null)
+      ]);
 
-    let isMounted = true;
-    const fetchData = async () => {
-      try {
-        const baseUrl = `${activeServer.protocol}${activeServer.host}`.replace(/\/$/, "");
-        const headers = { 'Authorization': `Bearer ${activeServer.token}` };
-
-        const [sysRes, apiRes, appRes] = await Promise.all([
-          fetch(`${baseUrl}/api/v1/metrics/timeseries/system`, { headers }).catch(() => null),
-          fetch(`${baseUrl}/api/v1/metrics/timeseries/api`, { headers }).catch(() => null),
-          fetch(`${baseUrl}/api/v1/metrics/timeseries/application`, { headers }).catch(() => null)
-        ]);
-
-        if (!isMounted) return;
-
-        if (sysRes && sysRes.ok) {
-          const data: TimeseriesResponse = await sysRes.json();
-          setSystemData(data.data || []);
-        }
-        if (apiRes && apiRes.ok) {
-          const data: TimeseriesResponse = await apiRes.json();
-          setApiData(data.data || []);
-        }
-        if (appRes && appRes.ok) {
-          const data: TimeseriesResponse = await appRes.json();
-          setAppData(data.data || []);
-        }
-      } catch (err) {
-        console.error("Failed to fetch timeseries data", err);
+      if (sysRes) {
+        setSystemData((sysRes as TimeseriesResponse).data || []);
       }
-    };
+      if (apiRes) {
+        setApiData((apiRes as TimeseriesResponse).data || []);
+      }
+      if (appRes) {
+        setAppData((appRes as TimeseriesResponse).data || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch timeseries data", err);
+    }
+  }, [activeServer, apiFetch]);
 
-    fetchData();
-    const intervalId = setInterval(fetchData, 10000);
-    return () => {
-      isMounted = false;
-      clearInterval(intervalId);
-    };
-  }, [activeServer]);
+  usePolling(fetchData, 10000, { enabled: !!activeServer });
 
   const noDataText = t('views.timeseries.noData');
 

@@ -49,8 +49,9 @@
       "underConstruction": "This view is under construction.",
       "configuration": "Configuration"
     },
-
-    "overview": { "title": "System Overview" },
+    "overview": {
+      "title": "System Overview"
+    },
     "timeseries": {
       "systemMetricsTrend": "System Metrics Trend",
       "apiPerformanceTrend": "API Performance Trend",
@@ -70,7 +71,6 @@
       "noMatch": "No matching databases",
       "tryDifferentSearch": "Try adjusting your search filter.",
       "createFirst": "Create a database to get started.",
-
       "delete": "Delete",
       "measurements": "Measurements",
       "retentionPolicies": "Retention Policies",
@@ -190,7 +190,8 @@
       "failedToLoad": "Failed to load",
       "addFailed": "Add failed",
       "removeFailed": "Remove failed",
-      "tokenNamePlaceholder": "e.g. CI pipeline"
+      "tokenNamePlaceholder": "e.g. CI pipeline",
+      "authFeatureNotEnabled": "Token feature is not enabled. Please check if the auth module is enabled in your server configuration."
     },
     "rbac": {
       "title": "RBAC",
@@ -251,7 +252,9 @@
       "noPreview": "No preview",
       "prevStep": "Previous",
       "nextStep": "Next",
-      "confirmBind": "Confirm bind"
+      "confirmBind": "Confirm bind",
+      "rbacFeatureNotEnabled": "RBAC feature is not enabled. Please check if the RBAC module is enabled in your server configuration.",
+      "noLicense": "RBAC requires an enterprise license and administrator privileges."
     },
     "welcomeModal": {
       "title": "Welcome to IotEdge DB Explorer",
@@ -277,7 +280,6 @@
         }
       }
     },
-    
     "plugins": {
       "title": "Manage continuous queries",
       "pageSubtitle": "Built-in tools on the active server. Continuous Queries are managed below (CQ API must be enabled on the server).",
@@ -347,7 +349,92 @@
       "failedToDelete": "Failed to delete continuous query",
       "failedToExecute": "Failed to execute continuous query",
       "failedToToggle": "Failed to toggle CQ status",
-      "failedToLoadHistory": "Failed to load execution history"
+      "failedToLoadHistory": "Failed to load execution history",
+      "sectionBasicInfo": "Basic Info",
+      "sectionSourceTarget": "Source & Target",
+      "sectionSchedule": "Schedule",
+      "sectionQueryMode": "Query Mode",
+      "sectionAggregation": "Aggregation",
+      "sectionFieldSelection": "Field Selection",
+      "sectionSqlPreview": "SQL Preview (auto-generated)",
+      "sqlModeHint": "Write raw SQL for full control",
+      "dsModeHint": "Aggregate source data into time buckets for downsampling and metric rollups",
+      "defaultAgg": "Default aggregation",
+      "defaultAggHint": "Applied to all fields unless overridden",
+      "bucketInterval": "Bucket interval",
+      "fieldOverrides": "Field-level overrides",
+      "targetMeasurementPlaceholder": "Optional when same as source",
+      "sqlMode": "SQL",
+      "downsampleMode": "Downsample",
+      "ohlcMode": "OHLC",
+      "ohlcModeHint": "Generate OHLC candles and rolling historical volatility for price or metric analysis",
+      "sectionOhlc": "OHLC Configuration",
+      "loadingFields": "Loading field list…",
+      "noFieldsHint": "No fields found. Please select a database and source measurement first.",
+      "selectField": "Select field",
+      "ohlcTimeUnit": "Time unit",
+      "ohlcTimeColumn": "Time column",
+      "ohlcEntityIdColumn": "Entity ID column",
+      "ohlcValueColumn": "Value column",
+      "ohlcVolumeColumn": "Volume column (optional)",
+      "ohlcLookbackWindow": "Volatility lookback window",
+      "ohlcLookbackHint": "Controls the STDDEV window (ROWS BETWEEN N-1 PRECEDING AND CURRENT ROW)",
+      "ohlcUnit": {
+        "minute": "Minute",
+        "hour": "Hour",
+        "day": "Day",
+        "month": "Month",
+        "year": "Year"
+      },
+      "spcMode": "SPC",
+      "aerospaceMode": "ASOF",
+      "iotMode": "IoT Drift",
+      "defenseMode": "Entropy",
+      "spcModeHint": "Statistical process control: mean/σ, control limits, Cpk and correlation",
+      "aerospaceModeHint": "ASOF dual-measurement time alignment",
+      "iotModeHint": "Regression drift detection: REGR_SLOPE trend and health flag",
+      "defenseModeHint": "Classification entropy: ENTROPY and track_count",
+      "sectionSpc": "Statistical Process Control (SPC) Configuration",
+      "sectionAerospace": "ASOF Dual-Measurement Time Alignment",
+      "sectionIot": "Regression Drift Detection",
+      "sectionDefense": "Classification Entropy",
+      "spcValueColumn": "Value column",
+      "spcGroupColumns": "Group tags (GROUP BY)",
+      "spcGroupHint": "e.g. line / station tags that define the grouping dimension for control limits",
+      "spcUpperSpec": "Upper spec limit",
+      "spcLowerSpec": "Lower spec limit",
+      "spcCorrColumn": "Correlation column (optional)",
+      "spcCorrHint": "e.g. ambient temperature column, generates CORR(this, value)",
+      "spcHistogram": "Include HISTOGRAM(value)",
+      "spcHistogramDesc": "Output value distribution histogram",
+      "spcHistogramOn": "On",
+      "spcHistogramOff": "Off",
+      "spcSigmaMultiplier": "σ Multiplier",
+      "spcSigmaHint": "Control limits = ±kσ, usually 3",
+      "aeroTimeColumn": "Time column",
+      "aeroValueColumn": "Value column",
+      "aeroAsOfTitle": "ASOF dual-measurement time alignment",
+      "aeroSecondMeasurement": "Second measurement",
+      "aeroSecondPlaceholder": "Select second measurement",
+      "aeroJoinKey": "Join key",
+      "aeroJoinPlaceholder": "e.g. aircraft",
+      "aeroLookback": "Lookback window (seconds)",
+      "aeroLookbackHint": "Limits the second measurement scan range during ASOF alignment to keep incremental execution",
+      "iotDriftThreshold": "Drift threshold",
+      "iotEntityColumn": "Entity ID column",
+      "iotValueColumn": "Value column",
+      "defCorrColumn": "Correlation column (optional)",
+      "defCorrHint": "e.g. report count, generates CORR(this, sensor column)",
+      "defSensorColumn": "Sensor / entity column",
+      "defClassColumn": "Classification column",
+      "aeroValueRequired": "Please select a value column",
+      "aeroSecondRequired": "Please select a second measurement",
+      "aeroJoinRequired": "Please select a join key",
+      "spcValueRequired": "Please select a value column",
+      "iotEntityRequired": "Please select an entity ID column",
+      "iotValueRequired": "Please select a value column",
+      "defSensorRequired": "Please select a sensor/entity column",
+      "defClassRequired": "Please select a classification column"
     },
     "pluginsMqtt": {
       "title": "MQTT Subscriptions",
@@ -485,6 +572,8 @@
       "past24h": "Past 24h",
       "past7d": "Past 7d",
       "past30d": "Past 30d",
+      "allTime": "All Time",
+      "askAi": "Ask AI about this query",
       "custom": "Custom...",
       "selectCustomTimeRangeTitle": "Select Custom Time Range",
       "startTimeLabel": "Start Time",
@@ -498,21 +587,16 @@
     "integrations": {
       "title": "Integrations",
       "subtitle": "Configure external service integrations",
-
       "aiConfigTitle": "AI Configuration",
       "aiConfigSubtitle": "Configure your API key for Natural Language Search functionality",
-
       "aiProviderLabel": "AI provider",
       "aiProviderHelp": "Choose which LLM vendor or OpenAI-compatible API preset to use for natural language search.",
-
       "baseUrlLabel": "Base URL",
       "baseUrlPlaceholder": "https://your-openai-compatible-endpoint/v1",
       "baseUrlHelp": "API endpoint URL (e.g. {{url}}).",
-
       "apiKeyLabel": "API Key",
       "apiKeyPlaceholder": "Your API key",
       "apiKeyHelp": "Enter your API key to enable natural language search capabilities.",
-
       "modelNameLabel": "Model Name",
       "modelNamePlaceholder": "e.g. gpt-4, deepseek-chat, qwen-max",
       "modelNameHelp": "Specify the model ID to use for AI queries. Update this when your provider releases new models.",
@@ -527,31 +611,30 @@
       "fetchModelsError429": "Too many requests (429). Please try again later.",
       "fetchModelsErrorHttp": "Request failed (HTTP {{status}}).",
       "fetchModelsErrorNetwork": "Network error. Please check the Base URL and CORS configuration (if using a custom endpoint).",
-
       "customInstructionsLabel": "Custom Database Instructions",
       "customInstructionsSummaryEmpty": "No custom instructions configured",
       "customInstructionsSummaryWithCount": "Custom instructions configured ({{count}} characters)",
       "customInstructionsManage": "Manage",
       "customInstructionsHelp": "Provide context about your database schema, naming conventions, and common query patterns to improve AI-generated SQL queries and responses.",
-
       "saveAiConfigButton": "Save AI Configuration",
       "saveStatusSaved": "Saved!",
-
+      "testConnectionButton": "Test Connection",
+      "testErrorNoUrl": "Please configure a Base URL first.",
+      "testErrorNoModel": "Please configure a model name first.",
+      "testSuccess": "Connection successful! Configuration is valid.",
+      "testErrorFailed": "Connection failed. Please check the Base URL and API Key.",
       "modalTitle": "Custom Database Instructions",
       "modalDescription": "Provide context about your database to improve AI-generated queries and responses.",
       "modalTabInstructions": "INSTRUCTIONS",
       "modalTabTemplate": "EXAMPLE TEMPLATE",
       "modalTextareaPlaceholder": "Enter custom instructions about your database structure, naming conventions, or common query patterns...",
-
       "clearButton": "Clear",
       "uploadButton": "Upload txt or md File",
       "uploadInvalidType": "Please choose a .txt or .md file.",
       "uploadReadFailed": "Failed to read the file.",
       "useTemplateButton": "Use this template",
       "saveInstructionsButton": "Save Instructions",
-
       "exampleTemplate": "Here is an example structure:\n\n- Table: system_metrics\n  Columns:\n  - time (timestamp)\n  - cpu_usage (float)\n  - memory_usage (float)\n  - server_id (string)\n\n- Table: active_servers\n  Columns:\n  - server_id (string)\n  - region (string)\n\nRules:\n1. Always JOIN `system_metrics` and `active_servers` on `server_id`.\n2. Treat times as UTC.\n3. Keep results within the last 24 hours by default unless specified.",
-
       "providers": {
         "custom": "Custom (Custom)",
         "lmstudio": "LMStudio",
@@ -571,7 +654,6 @@
       "opening": "Opening help documentation in a new tab…",
       "openLink": "Open help documentation"
     },
-
     "servers": {
       "title": "Configure Servers",
       "subtitle": "Connect to your IotEdge DB servers to start exploring your data.",
@@ -591,9 +673,9 @@
       "submitAdd": "Add Server",
       "submitUpdate": "Update Server",
       "delete": "Delete Server",
-      "deleteConfirm": "Are you sure you want to delete server \"{{name}}\"?"
+      "deleteConfirm": "Are you sure you want to delete server \"{{name}}\"?",
+      "healthCheckFailed": "Unable to connect to the server. Please check the address, network, or whether the /health endpoint is accessible."
     },
-
     "systemOverview": {
       "title": "System Overview",
       "subtitle": "Monitoring metrics for {{serverName}}",
@@ -603,11 +685,54 @@
       "refreshing": "Refreshing...",
       "loadingMetrics": "Loading metrics from {{host}}...",
       "errorFetching": "Error fetching metrics:",
-      "errorFailedToFetch": "Failed to fetch metrics"
+      "errorFailedToFetch": "Failed to fetch metrics",
+      "applicationLogs": {
+        "title": "Application Logs",
+        "levelAll": "All Levels",
+        "levelDEBUG": "DEBUG",
+        "levelINFO": "INFO",
+        "levelWARN": "WARN",
+        "levelERROR": "ERROR",
+        "timeRange15m": "Past 15m",
+        "timeRange1h": "Last hour",
+        "timeRange6h": "Past 6h",
+        "timeRange24h": "Past 24h",
+        "timeRange7d": "Past 7d",
+        "timeRangeall": "All time",
+        "searchPlaceholder": "Search logs...",
+        "autoRefresh": "Auto",
+        "refresh": "Refresh",
+        "loading": "Loading logs...",
+        "noData": "No logs found",
+        "showingCount": "Showing {{count}} of {{total}} logs",
+        "colTime": "Time",
+        "colLevel": "Level",
+        "colComponent": "Component",
+        "colMessage": "Message",
+        "failedToLoad": "Failed to load application logs"
+      }
     },
-
     "dataExplorer": {
       "title": "Data Explorer",
+      "past15m": "Past 15m",
+      "past1h": "Past 1h",
+      "past6h": "Past 6h",
+      "past24h": "Past 24h",
+      "past7d": "Past 7d",
+      "past30d": "Past 30d",
+      "allTime": "All Time",
+      "askAi": "Ask AI about this query",
+      "askAiAboutError": "Ask AI about this error",
+      "runStatement": "Run this statement",
+      "custom": "Custom...",
+      "selectCustomTimeRangeTitle": "Select Custom Time Range",
+      "startTimeLabel": "Start Time",
+      "endTimeLabel": "End Time (Optional)",
+      "apply": "Apply",
+      "chartError": "Cannot render chart",
+      "noNumericColumns": "No numeric columns in query results to chart",
+      "noNumericColumnsHint": "Change Cell type to Table, or modify SQL to include numeric columns",
+      "noDataToChart": "No data to chart",
       "noServerTitle": "No Server Selected",
       "noServerHint": "Please configure and select a server in the Sidebar to use Data Explorer.",
       "noDatabaseSelected": "No Database (Cross-DB)",
@@ -616,7 +741,6 @@
       "searchTablesPlaceholder": "Search measurements...",
       "loading": "Loading...",
       "noTablesFound": "No tables found",
-
       "queryTabTitle": "Query {{count}}",
       "historyButton": "History",
       "queryHistoryTitle": "Query History",
@@ -628,7 +752,6 @@
       "noFavoritesYet": "No favorite queries yet.",
       "addToFavorites": "Add to favorites",
       "removeFromFavorites": "Remove from favorites",
-
       "sql": "SQL",
       "naturalLanguage": "Natural Language ✨",
       "generateSql": "Generate SQL",
@@ -636,29 +759,25 @@
       "selectDatabaseFirst": "Please select a database first.",
       "failedToGenerateSql": "Failed to generate SQL: {{error}}",
       "askPlaceholder": "Ask a question about your data in plain English. Example: 'Calculate the average CPU usage for each server in the last 24 hours'",
-
       "past15m": "Past 15m",
       "past1h": "Past 1h",
       "past6h": "Past 6h",
       "past24h": "Past 24h",
       "past7d": "Past 7d",
       "past30d": "Past 30d",
-
-      "runQuery": "Run Query",
+      "runQuery": "Run",
+      "formatSql": "Format SQL",
       "executingQuery": "Executing query...",
       "runAQueryToSeeResults": "Run a query to see results here",
       "chartError": "Cannot render chart",
       "noDataToChart": "No data to chart",
       "rowsInTime": "{{rows}} rows in {{ms}} ms",
-
       "export": "Export",
       "exportCsv": "CSV",
       "exportJson": "JSON",
-
       "rowsPerPage": "Rows per page:",
       "rowsRangeOf": "{{from}}–{{to}} of {{total}}",
       "noDataReturned": "No data returned",
-
       "selectCustomTimeRangeTitle": "Select Custom Time Range",
       "startTimeLabel": "Start Time (e.g., UTC)",
       "endTimeLabel": "End Time (Optional)",
@@ -668,70 +787,54 @@
       "savedToDashboard": "Saved to Dashboard",
       "goToDashboards": "Go to Dashboards",
       "database": "Database",
-      "selectDatabase": "Default"
+      "selectDatabase": "Default",
+      "aiAssistant": "AI Assistant"
     },
-
     "writeData": {
       "noServerTitle": "No Server Selected",
       "noServerHint": "Please configure and select a server in the Sidebar to write data.",
-
       "title": "Write Data",
       "subtitle": "Write line protocol or import CSV/Parquet into your selected database.",
       "refreshDatabasesTooltip": "Refresh Databases",
-
       "databaseLabel": "Database",
       "importModeLabel": "Import Mode",
-
       "lineProtocolLabel": "Line Protocol",
       "csvModeLabel": "CSV",
       "parquetModeLabel": "Parquet",
-
       "csvFileLabel": "CSV File",
       "parquetFileLabel": "Parquet File",
       "measurementLabel": "Measurement",
       "selectMeasurement": "Select a measurement",
       "selectFile": "Select File",
       "noFileSelected": "No file selected",
-
       "writeData": "Write Data",
       "importFile": "Import File",
       "writing": "Writing...",
       "importing": "Importing...",
-
       "supportCommentsHint": "Support comments with # and multi-line batch writes.",
       "uploadAndImportHint": "Upload {{mode}} and import to the selected measurement {{measurement}} in the chosen database.",
-
       "sampleDatasetsTitle": "Sample datasets",
       "sampleDatasetsDesc": "Quickly import sample data into the selected database.",
       "remoteSampleWarning": "Remote sample will be downloaded from the official server.",
       "importSample": "Import Sample",
       "importingSample": "Importing...",
-
       "currentDatabaseMeasurementsTitle": "Current Database Measurements",
       "noMeasurementsFound": "No measurements found.",
-
       "pleaseSelectDatabaseFirst": "Please select a database first.",
       "pleaseChooseFileFirst": "Please choose a file first.",
       "pleaseSelectMeasurementFirst": "Please select a measurement first.",
       "pleaseSelectSampleDataset": "Please select a sample dataset.",
-
       "importingSampleMessage": "Importing sample: {{name}}...",
       "sampleImportedMessage": "Sample imported: {{name}} ({{lines}} lines) into {{database}}.",
-
       "writingLinesMessage": "Writing {{count}} lines...",
       "wroteLinesSuccessMessage": "Successfully wrote {{totalLines}} lines to {{database}}.",
-
       "importingFileMessage": "Importing {{fileName}}...",
       "importSucceededMessage": "{{mode}} import succeeded for {{database}} / {{measurement}}.",
       "importFailedMessage": "{{mode}} import failed.",
-
       "browserBlockedDownloadMessage": "Failed to download sample data. Check your network connection or upload the file manually.",
       "failedToImportSampleMessage": "Failed to import sample dataset.",
-
       "networkWriteErrorMessage": "Network error while writing data.",
-
       "invalidLineProtocolMessage": "Invalid line protocol.",
-
       "pleaseEnterLineProtocolData": "Please enter line protocol data.",
       "lineMissingFieldsSectionMessage": "Line {{line}}: missing fields section.",
       "lineInvalidMeasurementMessage": "Line {{line}}: invalid measurement.",
@@ -957,6 +1060,60 @@
       "triggerAllStep2": "Are you sure you want to execute all enabled retention policies now? This will delete expired data and cannot be undone.",
       "triggerAllConfirm": "Confirm Run All"
     }
+  },
+  "ai": {
+    "panelTitle": "AI Query Assistant",
+    "statusOk": "AI service connected",
+    "statusChecking": "Checking connection…",
+    "statusFailed": "AI service connection failed, click to configure",
+    "composerConfigHint": "AI service connection failed. Click to configure in Integrations.",
+    "editMessage": "Edit",
+    "saveAndSubmit": "Save & Submit",
+    "thinkingProcess": "Thinking process",
+    "justNow": "just now",
+    "minutesAgo": "{{count}} min ago",
+    "hoursAgo": "{{count}} hr ago",
+    "suggestion1": "Show data overview for the last hour",
+    "suggestion2": "Count records per device",
+    "suggestion3": "Find top 5 CPU usage peaks in the last 24 hours",
+    "suggestion4": "Calculate hourly average of temperature sensors",
+    "suggestion5": "Help me optimize this query's performance",
+    "messages": "{{count}} messages",
+    "newConversation": "New Conversation",
+    "clearConversation": "Clear Conversation",
+    "currentDb": "Current Database",
+    "tables": "tables",
+    "welcomeTitle": "AI Query Assistant",
+    "welcomeDesc": "Describe your query in natural language, and I'll generate precise SQL for you.",
+    "welcomeNoDb": "Please select a database from the left panel first, then I can help you with queries.",
+    "contextInfo": "I can access the schema of the following tables to generate accurate queries:",
+    "tryAsking": "Try asking me:",
+    "inputPlaceholder": "Describe the data you want to query... (Enter to send)",
+    "selectDbFirst": "Please select a database first",
+    "send": "Send",
+    "thinking": "Thinking...",
+    "you": "You",
+    "assistant": "AI Assistant",
+    "copySql": "Copy SQL",
+    "copy": "Copy",
+    "copied": "Copied",
+    "insertToEditor": "Insert to Editor",
+    "insert": "Insert",
+    "runQuery": "Run Query",
+    "run": "Run",
+    "stopGenerating": "Stop",
+    "retry": "Retry",
+    "unknownError": "Unknown error",
+    "generationAborted": "Generation stopped",
+    "apiNotFound": "AI service endpoint not found. Please check your integration settings.",
+    "apiUnauthorized": "Invalid API Key. Please check your configuration.",
+    "configWarning": "Please configure AI service in the Integrations page first",
+    "askAi": "Ask AI",
+    "diffTitle": "SQL Change Suggestions",
+    "diffOriginal": "Original",
+    "diffSuggested": "AI Suggested",
+    "diffAccept": "Accept",
+    "diffReject": "Reject",
+    "diffNoChange": "AI-generated SQL is identical to the original"
   }
 }
-

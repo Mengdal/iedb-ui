@@ -1,0 +1,86 @@
+.slide-out-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.slide-out-panel-backdrop {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity;
+}
+
+.slide-out-panel-open .slide-out-panel-backdrop {
+  opacity: 1;
+}
+
+/* 退出时 fade-out 更快 */
+.slide-out-panel:not(.slide-out-panel-open) .slide-out-panel-backdrop {
+  transition: opacity 0.2s ease;
+}
+
+.slide-out-panel-panel {
+  position: relative;
+  max-width: 100%;
+  height: 100%;
+  background-color: var(--bg-surface);
+  border-left: 1px solid var(--border-color);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.slide-out-panel-open .slide-out-panel-panel {
+  transform: translateX(0);
+}
+
+/* 退出时滑出更快 */
+.slide-out-panel:not(.slide-out-panel-open) .slide-out-panel-panel {
+  transition: transform 0.2s ease;
+}
+
+.slide-out-panel-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.slide-out-panel-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.slide-out-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px;
+  overscroll-behavior: contain;
+  isolation: isolate;
+  contain: paint;
+}
+
+.slide-out-panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .slide-out-panel-panel {
+    width: 100% !important;
+  }
+}

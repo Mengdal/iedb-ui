@@ -208,6 +208,22 @@
   margin-top: 8px;
 }
 
+.test-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.test-result-success {
+  color: #4ade80;
+}
+
+.test-result-error {
+  color: #ff6e6e;
+}
+
 .btn-filled-light {
   background-color: var(--bg-surface-hover);
   color: var(--text-muted);

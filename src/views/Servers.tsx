@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Plus, Check, Edit2, Trash2, Eye, EyeOff, X } from 'lucide-react';
+import { Plus, Check, Edit2, Trash2, Eye, EyeOff, X, AlertCircle, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useServers, ServerConnection } from '../contexts/ServerContext';
 import ConfirmModal from '../components/ConfirmModal';
+import { serverBaseUrl, serverFetch } from '../utils/server';
 import './Servers.css';
 
 const Servers: React.FC = () => {
@@ -21,15 +22,19 @@ const Servers: React.FC = () => {
   });
 
   const [showToken, setShowToken] = useState(false);
+  const [healthError, setHealthError] = useState<string | null>(null);
+  const [checkingHealth, setCheckingHealth] = useState(false);
 
   const openAddModal = () => {
     setEditingId(null);
+    setHealthError(null);
     setFormData({ name: '', protocol: 'http://', host: '', token: '' });
     setIsModalOpen(true);
   };
 
   const openEditModal = (server: ServerConnection) => {
     setEditingId(server.id);
+    setHealthError(null);
     setFormData({
       name: server.name,
       protocol: server.protocol,
@@ -39,8 +44,36 @@ const Servers: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const checkHealth = async (protocol: string, host: string) => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const res = await serverFetch(serverBaseUrl(protocol, host), '/health', {
+        method: 'GET',
+        signal: controller.signal,
+        raw: true,
+      });
+      clearTimeout(timeout);
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setHealthError(null);
+
+    if (!editingId) {
+      setCheckingHealth(true);
+      const healthy = await checkHealth(formData.protocol, formData.host);
+      setCheckingHealth(false);
+      if (!healthy) {
+        setHealthError(t('views.servers.healthCheckFailed'));
+        return;
+      }
+    }
+
     if (editingId) {
       updateServer(editingId, formData);
     } else {
@@ -166,11 +199,19 @@ const Servers: React.FC = () => {
                 </div>
               </div>
 
+              {healthError && (
+                <div className="error-message">
+                  <AlertCircle size={18} />
+                  {healthError}
+                </div>
+              )}
+
               <div className="modal-actions">
                 <button type="button" className="btn btn-outlined" onClick={() => setIsModalOpen(false)}>
                   {t('common.cancel')}
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="btn btn-primary" disabled={checkingHealth}>
+                  {checkingHealth ? <Loader2 size={16} className="spinning" /> : null}
                   {editingId ? t('views.servers.submitUpdate') : t('views.servers.submitAdd')}
                 </button>
               </div>

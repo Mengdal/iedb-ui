@@ -25,6 +25,7 @@
 
 .nav-menu {
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 12px 8px;
   display: flex;
@@ -77,6 +78,7 @@
 .nav-label {
   font-size: 14px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .sub-menu {
@@ -97,6 +99,7 @@
   color: var(--text-secondary);
   font-size: 13px;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
 .nav-sub-item:hover {
@@ -122,6 +125,17 @@
   z-index: 20;
 }
 
+/* Transparent bridge to cover the 8px gap so hover is not lost when moving
+   the cursor from the collapsed nav-item to the flyout submenu */
+.collapsed-sub-menu::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 100%;
+  width: 8px;
+  height: 100%;
+}
+
 .sidebar-footer {
   padding: 12px;
   border-top: 1px solid var(--border-color);
@@ -138,6 +152,8 @@
   font-size: 13px;
   cursor: pointer;
   color: var(--text-primary);
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .server-selector:hover {

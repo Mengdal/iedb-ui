@@ -1,0 +1,134 @@
+/* ============================================
+   SqlDiffView — 基于 @codemirror/merge 的 SQL 差异对比
+   ============================================ */
+
+.sqldiff-container {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  overflow: hidden;
+  background: transparent;
+  animation: diffSlideIn 0.3s ease;
+}
+
+@keyframes diffSlideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Header ---------- */
+.sqldiff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: rgba(99, 102, 241, 0.08);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.12);
+}
+
+.sqldiff-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #818cf8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------- MergeView 容器 ---------- */
+/* MergeView 默认不可滚动，需手动设高度+overflow（见官方文档） */
+.sqldiff-merge-container .cm-mergeView {
+  max-height: 280px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #1e1e1e;
+}
+
+/* MergeView baseTheme 未设 wrapper 布局，需手动 flex */
+.sqldiff-merge-container .cm-mergeViewEditors {
+  display: flex;
+}
+
+.sqldiff-merge-container .cm-mergeViewEditor {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 压缩字体以适配紧凑气泡（vscodeDark 默认 14px 偏大） */
+.sqldiff-merge-container .cm-editor {
+  font-size: 12px;
+}
+
+/* ---------- No change ---------- */
+.sqldiff-no-change {
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text-secondary, #94a3b8);
+  text-align: center;
+  background: rgba(99, 102, 241, 0.05);
+  border-radius: 6px;
+  border: 1px solid rgba(99, 102, 241, 0.1);
+  margin: 8px 0;
+}
+
+/* ---------- Actions ---------- */
+.sqldiff-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-color, #2a2a3e);
+  background: var(--bg-surface, #1a1a2e);
+}
+
+.sqldiff-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sqldiff-btn-accept {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.25);
+  color: #6ee7b7;
+}
+
+.sqldiff-btn-accept:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+.sqldiff-btn-reject {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.sqldiff-btn-reject:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #f87171;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+  .sqldiff-merge-container,
+  .sqldiff-merge-container .cm-mergeView,
+  .sqldiff-merge-container .cm-editor,
+  .sqldiff-merge-container .cm-scroller {
+    max-height: 200px;
+  }
+
+  .sqldiff-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+}

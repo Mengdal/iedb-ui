@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RefreshCw, Loader2, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useApiFetch } from '../hooks/useApiFetch';
+import { useDebounce } from '../hooks/useDebounce';
 import { formatTime } from '../utils/formatTime';
 import Pagination from '../components/Pagination';
 import './PageLayout.css';
@@ -37,7 +38,7 @@ function rfc3339Since(duration: string): string {
 
 const AuditLog: React.FC = () => {
   const { t, i18n } = useTranslation();
-  const { apiFetch, baseUrl, activeServer, noLicense, featureNotEnabled, resetGate } = useApiFetch();
+  const { apiFetch, activeServer, noLicense, featureNotEnabled, resetGate } = useApiFetch();
 
   const [logs, setLogs] = useState<AuditEntry[]>([]);
   const [offset, setOffset] = useState(0);
@@ -53,29 +54,15 @@ const AuditLog: React.FC = () => {
   const [filterDatabase, setFilterDatabase] = useState('');
   const [timeRange, setTimeRange] = useState('24h');
 
-  // Debounced filter values
-  const [debouncedActor, setDebouncedActor] = useState('');
-  const [debouncedDatabase, setDebouncedDatabase] = useState('');
-  const actorTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const dbTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const debouncedActor = useDebounce(filterActor, 300);
+  const debouncedDatabase = useDebounce(filterDatabase, 300);
 
   const onActorChange = useCallback((val: string) => {
     setFilterActor(val);
-    clearTimeout(actorTimerRef.current);
-    actorTimerRef.current = setTimeout(() => setDebouncedActor(val), 300);
   }, []);
 
   const onDatabaseChange = useCallback((val: string) => {
     setFilterDatabase(val);
-    clearTimeout(dbTimerRef.current);
-    dbTimerRef.current = setTimeout(() => setDebouncedDatabase(val), 300);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      clearTimeout(actorTimerRef.current);
-      clearTimeout(dbTimerRef.current);
-    };
   }, []);
 
   const fetchStats = useCallback(async () => {
@@ -93,7 +80,7 @@ const AuditLog: React.FC = () => {
     } catch {
       // silently ignore stats errors
     }
-  }, [activeServer, baseUrl, timeRange]);
+  }, [activeServer, timeRange]);
 
   useEffect(() => {
     fetchStats();
@@ -148,7 +135,7 @@ const AuditLog: React.FC = () => {
     };
     doFetch();
     return () => { cancelled = true; };
-  }, [activeServer, baseUrl, offset, filtersKey, refreshKey, t]);
+  }, [activeServer, offset, filtersKey, refreshKey, t]);
 
   const eventTypes = useMemo(() => {
     return Object.keys(stats).sort();
