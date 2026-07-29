@@ -11,6 +11,8 @@
     "noServer": "No server",
     "cancel": "Cancel",
     "close": "Close",
+    "clear": "Clear",
+    "save": "Save",
     "apply": "Apply",
     "confirmDelete": "Delete",
     "pagination": {
@@ -600,8 +602,6 @@
       "modelNameLabel": "Model Name",
       "modelNamePlaceholder": "e.g. gpt-4, deepseek-chat, qwen-max",
       "modelNameHelp": "Specify the model ID to use for AI queries. Update this when your provider releases new models.",
-      "fetchModels": "Fetch Models",
-      "fetchingModels": "Fetching...",
       "fetchModelsErrorNoUrl": "Please configure a Base URL first.",
       "fetchModelsEmpty": "No models returned by the API.",
       "fetchModelsError401": "Unauthorized (401). Please check your API Key.",
@@ -647,7 +647,24 @@
         "tencent-hunyuan": "Tencent Hunyuan (混元)",
         "baidu-qianfan": "Baidu Qianfan (千帆)",
         "iflytek-spark": "iFlytek Spark (讯飞星火)"
-      }
+      },
+      "mcpConfigTitle": "MCP Services",
+      "mcpConfigSubtitle": "Configure MCP tool services available to the AI assistant",
+      "addMcpServer": "Add MCP Service",
+      "addMcpServerConfirm": "Add",
+      "addMcpFormTitle": "Add Custom MCP Service",
+      "mcpTransportLabel": "Transport Type",
+      "mcpNameLabel": "Name",
+      "mcpNamePlaceholder": "e.g. My MCP",
+      "mcpUrlLabel": "Endpoint URL",
+      "mcpUrlPlaceholder": "e.g. http://localhost:8080/api/v1/mcp",
+      "mcpCommandLabel": "Command",
+      "mcpCommandPlaceholder": "e.g. npx -y @modelcontextprotocol/server-sqlite",
+      "mcpAuthLabel": "Authentication",
+      "mcpAuthNone": "None",
+      "mcpAuthBearer": "Bearer Token",
+      "mcpTokenLabel": "Token",
+      "mcpTokenPlaceholder": "Enter Bearer Token"
     },
     "helpDoc": {
       "title": "Documentation",
@@ -1061,6 +1078,20 @@
       "triggerAllConfirm": "Confirm Run All"
     }
   },
+  "mcp": {
+    "builtin": "Built-in",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "delete": "Delete",
+    "edit": "Edit",
+    "statusIdle": "Disconnected",
+    "statusConnecting": "Connecting",
+    "statusConnected": "Connected",
+    "statusError": "Error",
+    "tools": "Tools",
+    "showSchema": "View Parameters",
+    "hideSchema": "Hide Parameters"
+  },
   "ai": {
     "panelTitle": "AI Query Assistant",
     "statusOk": "AI service connected",
@@ -1092,8 +1123,6 @@
     "selectDbFirst": "Please select a database first",
     "send": "Send",
     "thinking": "Thinking...",
-    "you": "You",
-    "assistant": "AI Assistant",
     "copySql": "Copy SQL",
     "copy": "Copy",
     "copied": "Copied",
@@ -1108,12 +1137,22 @@
     "apiNotFound": "AI service endpoint not found. Please check your integration settings.",
     "apiUnauthorized": "Invalid API Key. Please check your configuration.",
     "configWarning": "Please configure AI service in the Integrations page first",
-    "askAi": "Ask AI",
     "diffTitle": "SQL Change Suggestions",
     "diffOriginal": "Original",
     "diffSuggested": "AI Suggested",
     "diffAccept": "Accept",
     "diffReject": "Reject",
-    "diffNoChange": "AI-generated SQL is identical to the original"
+    "diffNoChange": "AI-generated SQL is identical to the original",
+    "toolCalling": "calling",
+    "toolSuccess": "success",
+    "toolError": "failed",
+    "toolArgs": "args",
+    "toolResult": "result",
+    "errorFixPrompt": "Please analyze this SQL error and provide the corrected full SQL.",
+    "scrollToBottom": "Back to bottom",
+    "history": "History",
+    "conversationHistory": "Conversation History",
+    "noHistory": "No conversations yet",
+    "deleteConversation": "Delete conversation"
   }
 }

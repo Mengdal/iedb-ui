@@ -343,12 +343,6 @@
   border-bottom-right-radius: 8px;
 }
 
-.footer-left, .footer-right {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
 .btn-small {
   padding: 8px 12px;
   font-size: 13px;
@@ -453,4 +447,43 @@
 .model-dropdown-item.selected {
   color: var(--accent-primary);
   font-weight: 600;
+}
+
+/* ---------- MCP 服务配置 ---------- */
+.mcp-servers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.mcp-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  justify-content: center;
+  padding: 10px;
+  border-style: dashed;
+}
+
+.mcp-add-form {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 8px;
+  background-color: var(--bg-surface-hover);
+}
+
+.mcp-add-form h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.mcp-add-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
 }

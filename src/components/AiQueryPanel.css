@@ -2,41 +2,19 @@
    AiQueryPanel — AI 查询助手面板样式
    ============================================ */
 
-/* ---------- Overlay / Backdrop ---------- */
+/* ---------- Overlay（非阻塞：不挡编辑器点击） ---------- */
 .ai-panel-overlay {
   position: fixed;
   inset: 0;
   z-index: 1000;
   display: flex;
   justify-content: flex-end;
-  background: rgba(0, 0, 0, 0.3);
-  will-change: opacity;
-}
-
-.ai-panel-overlay.ai-panel-exiting {
-  animation: aiOverlayOut 0.25s ease forwards;
-}
-
-/* Non-blocking: overlay doesn't capture clicks, only panel does */
-.ai-panel-nonblocking {
-  background: transparent !important;
-  backdrop-filter: none;
+  background: transparent;
   pointer-events: none;
-  animation: none !important;
 }
 
-.ai-panel-nonblocking .ai-panel {
+.ai-panel-overlay .ai-panel {
   pointer-events: auto;
-}
-
-@keyframes aiOverlayIn {
-  from { background: rgba(0, 0, 0, 0); }
-  to   { background: rgba(0, 0, 0, 0.3); }
-}
-
-@keyframes aiOverlayOut {
-  from { background: rgba(0, 0, 0, 0.3); }
-  to   { background: rgba(0, 0, 0, 0); }
 }
 
 /* ---------- Panel ---------- */
@@ -356,12 +334,57 @@
 }
 
 /* ---------- Messages Area ---------- */
+.ai-messages-area-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
 .ai-messages-area {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  contain: paint;
+  /* 关闭 scroll anchoring：流式增高时浏览器不要偷偷拽视口 */
+  overflow-anchor: none;
   padding-bottom: 8px;
+}
+
+.ai-messages-content {
+  overflow-anchor: none;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-scroll-to-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-color, #2a2a3e);
+  border-radius: 999px;
+  background: var(--bg-elevated, #1a1a2e);
+  color: var(--text-primary, #e2e8f0);
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+  max-width: calc(100% - 24px);
+}
+
+.ai-scroll-to-bottom:hover {
+  border-color: rgba(99, 102, 241, 0.5);
+  color: #c7d2fe;
+  background: rgba(30, 30, 50, 0.95);
 }
 
 /* ---------- Welcome Screen ---------- */
@@ -369,7 +392,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 40px 24px 32px;
+  justify-content: center;
+  flex: 1;
+  padding: 32px 24px 20px;
   text-align: center;
 }
 
@@ -383,29 +408,29 @@
   align-items: center;
   justify-content: center;
   color: #818cf8;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .ai-welcome-title {
-  margin: 0 0 8px 0;
+  margin: 0 0 6px 0;
   font-size: 20px;
   font-weight: 700;
   color: var(--text-primary, #e2e8f0);
 }
 
 .ai-welcome-desc {
-  margin: 0 0 20px 0;
+  margin: 0 0 14px 0;
   font-size: 14px;
   color: var(--text-secondary, #94a3b8);
-  line-height: 1.6;
+  line-height: 1.5;
   max-width: 360px;
 }
 
 .ai-welcome-context {
   width: 100%;
   max-width: 380px;
-  margin-bottom: 24px;
-  padding: 14px 16px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
   background: var(--bg-surface, #1a1a2e);
   border: 1px solid var(--border-color, #2a2a3e);
   border-radius: 10px;
@@ -413,7 +438,7 @@
 }
 
 .ai-welcome-context p {
-  margin: 0 0 10px 0;
+  margin: 0 0 8px 0;
   font-size: 12px;
   color: var(--text-muted, #64748b);
 }
@@ -453,7 +478,7 @@
 }
 
 .ai-suggestions-label {
-  margin: 0 0 12px 0;
+  margin: 0 0 8px 0;
   font-size: 13px;
   color: var(--text-muted, #64748b);
   text-align: left;

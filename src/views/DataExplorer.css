@@ -610,7 +610,8 @@
 
 .results-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 13px;
   text-align: left;
 }
@@ -621,6 +622,9 @@
   font-weight: 500;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .results-table td {

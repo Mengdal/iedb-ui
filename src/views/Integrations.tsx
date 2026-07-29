@@ -1,7 +1,16 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { BrainCircuit, Settings2, Eye, EyeOff, FileText, X, Upload, ChevronDown, ChevronUp, RefreshCw, Zap, CheckCircle2, XCircle } from 'lucide-react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { BrainCircuit, Settings2, Eye, EyeOff, FileText, X, Upload, ChevronDown, ChevronUp, RefreshCw, Zap, CheckCircle2, XCircle, Plus, Server } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { aiFetch } from '../utils/server';
+import { useServers } from '../contexts/ServerContext';
+import McpServerCard from '../components/McpServerCard';
+import {
+  McpServerConfig,
+  loadMcpServers,
+  saveMcpServers,
+  generateMcpServerId,
+} from '../utils/mcpClient';
+import { mcpManager } from '../utils/mcpManager';
 import './Integrations.css';
 
 type AIProviderId =
@@ -67,6 +76,17 @@ const Integrations: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState('');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // MCP 服务管理
+  const { activeServer } = useServers();
+  const [mcpServers, setMcpServers] = useState<McpServerConfig[]>(() => loadMcpServers());
+  const [showAddMcpForm, setShowAddMcpForm] = useState(false);
+  const [newMcpName, setNewMcpName] = useState('');
+  const [newMcpUrl, setNewMcpUrl] = useState('');
+  const [newMcpToken, setNewMcpToken] = useState('');
+  const [newMcpAuthType, setNewMcpAuthType] = useState<'bearer' | 'none'>('none');
+  const [newMcpTransport, setNewMcpTransport] = useState<'streamablehttp' | 'sse' | 'stdio'>('streamablehttp');
+  const [newMcpCommand, setNewMcpCommand] = useState('');
 
   const currentProvider = providerConfig(provider);
   const effectiveDefaultBaseUrl = currentProvider.defaultBaseUrl || t('views.integrations.baseUrlPlaceholder');
@@ -267,6 +287,101 @@ const Integrations: React.FC = () => {
     }
   };
 
+  // ---------- MCP 服务管理 ----------
+
+  /** 同步 iedb 自带 MCP：当 activeServer 变化时自动更新/创建 */
+  useEffect(() => {
+    if (!activeServer) return;
+    // 自带 MCP 使用相对路径，dev 模式下走 vite proxy，生产同源直接访问，
+    // 避免跨域问题。token 从 activeServer 取。
+    const builtinUrl = '/api/v1/mcp';
+    setMcpServers((prev) => {
+      const existing = prev.find((s) => s.type === 'builtin');
+      let next: McpServerConfig[];
+      if (existing) {
+        next = prev.map((s) =>
+          s.type === 'builtin'
+            ? {
+                ...s,
+                name: 'IotEdgeDB MCP',
+                url: builtinUrl,
+                token: activeServer.token,
+              }
+            : s
+        );
+      } else {
+        next = [
+          {
+            id: 'builtin',
+            name: 'IotEdgeDB MCP',
+            type: 'builtin',
+            transport: 'streamablehttp',
+            url: builtinUrl,
+            enabled: true,
+            authType: 'bearer',
+            token: activeServer.token,
+          },
+          ...prev,
+        ];
+      }
+      saveMcpServers(next);
+      return next;
+    });
+  }, [activeServer]);
+
+  const handleUpdateMcpServer = useCallback(
+    (config: McpServerConfig) => {
+      setMcpServers((prev) => {
+        const next = prev.map((s) => (s.id === config.id ? config : s));
+        saveMcpServers(next);
+        // 同步 manager 池状态（enabled=false 时会强制断开）
+        mcpManager.refreshConfigs();
+        return next;
+      });
+    },
+    []
+  );
+
+  const handleDeleteMcpServer = useCallback(
+    (id: string) => {
+      mcpManager.disconnect(id);
+      setMcpServers((prev) => {
+        const next = prev.filter((s) => s.id !== id);
+        saveMcpServers(next);
+        mcpManager.refreshConfigs();
+        return next;
+      });
+    },
+    []
+  );
+
+  const handleAddMcpServer = useCallback(() => {
+    if (!newMcpName.trim() || !newMcpUrl.trim()) return;
+    const config: McpServerConfig = {
+      id: generateMcpServerId(),
+      name: newMcpName.trim(),
+      type: 'custom',
+      transport: newMcpTransport,
+      url: newMcpUrl.trim(),
+      enabled: true,
+      authType: newMcpAuthType,
+      token: newMcpToken.trim() || undefined,
+      command: newMcpTransport === 'stdio' ? newMcpCommand.trim() : undefined,
+    };
+    setMcpServers((prev) => {
+      const next = [...prev, config];
+      saveMcpServers(next);
+      return next;
+    });
+    setNewMcpName('');
+    setNewMcpUrl('');
+    setNewMcpToken('');
+    setNewMcpAuthType('none');
+    setNewMcpTransport('streamablehttp');
+    setNewMcpCommand('');
+    setShowAddMcpForm(false);
+  }, [newMcpName, newMcpUrl, newMcpToken, newMcpAuthType, newMcpTransport, newMcpCommand]);
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -459,6 +574,130 @@ const Integrations: React.FC = () => {
               )}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* MCP 服务配置 */}
+      <div className="integrations-section">
+        <div className="integration-card">
+          <div className="integration-header">
+            <Server size={24} className="integration-icon" />
+            <div className="integration-title-wrap">
+              <h3>{t('views.integrations.mcpConfigTitle', 'MCP 服务')}</h3>
+              <p>{t('views.integrations.mcpConfigSubtitle', '配置 AI 助手可使用的 MCP 工具服务')}</p>
+            </div>
+          </div>
+
+          <div className="mcp-servers-list">
+            {mcpServers.map((server) => (
+              <McpServerCard
+                key={server.id}
+                config={server}
+                onUpdate={handleUpdateMcpServer}
+                onDelete={server.type === 'custom' ? handleDeleteMcpServer : undefined}
+                t={t}
+              />
+            ))}
+          </div>
+
+          {!showAddMcpForm ? (
+            <button
+              className="btn-outlined mcp-add-btn"
+              onClick={() => setShowAddMcpForm(true)}
+            >
+              <Plus size={16} />
+              {t('views.integrations.addMcpServer', '添加 MCP 服务')}
+            </button>
+          ) : (
+            <div className="mcp-add-form">
+              <h4>{t('views.integrations.addMcpFormTitle', '添加自定义 MCP 服务')}</h4>
+              <div className="form-group">
+                <label>{t('views.integrations.mcpTransportLabel', '传输类型')}</label>
+                <select
+                  className="integration-select"
+                  value={newMcpTransport}
+                  onChange={(e) => setNewMcpTransport(e.target.value as 'streamablehttp' | 'sse' | 'stdio')}
+                >
+                  <option value="streamablehttp">Streamable HTTP</option>
+                  <option value="sse">SSE</option>
+                  <option value="stdio">Stdio</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>{t('views.integrations.mcpNameLabel', '名称')}</label>
+                <input
+                  type="text"
+                  value={newMcpName}
+                  onChange={(e) => setNewMcpName(e.target.value)}
+                  placeholder={t('views.integrations.mcpNamePlaceholder', '例如：我的 MCP')}
+                  className="integration-input"
+                />
+              </div>
+              {newMcpTransport === 'stdio' ? (
+                <div className="form-group">
+                  <label>{t('views.integrations.mcpCommandLabel', '命令')}</label>
+                  <input
+                    type="text"
+                    value={newMcpCommand}
+                    onChange={(e) => setNewMcpCommand(e.target.value)}
+                    placeholder={t('views.integrations.mcpCommandPlaceholder', '例如：npx -y @modelcontextprotocol/server-sqlite')}
+                    className="integration-input"
+                  />
+                </div>
+              ) : (
+                <div className="form-group">
+                  <label>{t('views.integrations.mcpUrlLabel', '端点 URL')}</label>
+                  <input
+                    type="text"
+                    value={newMcpUrl}
+                    onChange={(e) => setNewMcpUrl(e.target.value)}
+                    placeholder={t('views.integrations.mcpUrlPlaceholder', '例如：http://localhost:8080/api/v1/mcp')}
+                    className="integration-input"
+                  />
+                </div>
+              )}
+              <div className="form-group">
+                <label>{t('views.integrations.mcpAuthLabel', '认证方式')}</label>
+                <select
+                  className="integration-select"
+                  value={newMcpAuthType}
+                  onChange={(e) => setNewMcpAuthType(e.target.value as 'bearer' | 'none')}
+                >
+                  <option value="none">{t('views.integrations.mcpAuthNone', '无认证')}</option>
+                  <option value="bearer">{t('views.integrations.mcpAuthBearer', 'Bearer Token')}</option>
+                </select>
+              </div>
+              {newMcpAuthType === 'bearer' && (
+                <div className="form-group">
+                  <label>{t('views.integrations.mcpTokenLabel', 'Token')}</label>
+                  <input
+                    type="password"
+                    value={newMcpToken}
+                    onChange={(e) => setNewMcpToken(e.target.value)}
+                    placeholder={t('views.integrations.mcpTokenPlaceholder', '输入 Bearer Token')}
+                    className="integration-input"
+                  />
+                </div>
+              )}
+              <div className="mcp-add-form-actions">
+                <button className="btn-text" onClick={() => setShowAddMcpForm(false)}>
+                  {t('common.cancel', '取消')}
+                </button>
+                <button
+                  className="btn-filled-light"
+                  disabled={
+                    !newMcpName.trim() ||
+                    (newMcpTransport === 'stdio'
+                      ? !newMcpCommand.trim()
+                      : !newMcpUrl.trim())
+                  }
+                  onClick={handleAddMcpServer}
+                >
+                  {t('views.integrations.addMcpServerConfirm', '添加')}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

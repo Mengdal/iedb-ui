@@ -223,6 +223,8 @@
   color: var(--text-primary, #e2e8f0);
   font-size: 13px;
   line-height: 1.6;
+  /* 避免父级 pre-wrap 导致表格管道符原文展示 */
+  white-space: normal;
 }
 
 .ai-md-paragraph {
@@ -241,10 +243,6 @@
 
 .ai-md-heading:first-child {
   margin-top: 0;
-}
-
-.ai-md-spacer {
-  height: 6px;
 }
 
 .ai-md-inline-code {
@@ -280,6 +278,43 @@
   margin-bottom: 2px;
   color: var(--text-primary, #e2e8f0);
   line-height: 1.5;
+}
+
+/* Markdown 表格（MCP 查询结果等） */
+.ai-md-table-wrap {
+  margin: 6px 0;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.ai-md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.ai-md-table th {
+  background-color: var(--bg-surface);
+  padding: 6px 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.ai-md-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.ai-md-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ai-md-table tbody tr:hover td {
+  background-color: rgba(255, 255, 255, 0.02);
 }
 
 /* ---------- SQL Code Block ---------- */
@@ -526,4 +561,87 @@
   .sql-action-btn {
     padding: 4px;
   }
+}
+
+/* ============================================
+   工具调用 — 复用 .ai-reasoning 折叠样式
+   ============================================ */
+
+.ai-tool-calls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 10px 0;
+}
+
+/* 与思考过程共用 .ai-reasoning，仅补充工具特有细节 */
+.ai-tool-call {
+  margin: 0;
+}
+
+.ai-tool-call-sep {
+  color: var(--text-tertiary, rgba(127, 127, 127, 0.5));
+  margin: 0 2px;
+}
+
+.ai-tool-call-tool-name {
+  background: rgba(99, 102, 241, 0.12);
+  color: #c4b5fd;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+}
+
+.ai-tool-call-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ai-tool-call-status-success {
+  color: #4caf50;
+}
+
+.ai-tool-call-status-error {
+  color: #f44336;
+}
+
+.ai-tool-call-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Markdown 表格/段落需要正常流式布局，覆盖 reasoning 的 pre-wrap */
+  white-space: normal;
+}
+
+.ai-tool-call-section-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.ai-tool-call-section .ai-md-paragraph {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.ai-tool-call-section .ai-md-table-wrap {
+  margin: 0;
+}
+
+.ai-tool-call-section .ai-md-code-inline {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* Loader 旋转（工具调用 / 流式状态） */
+.spin {
+  animation: ai-spin 0.8s linear infinite;
+}
+
+@keyframes ai-spin {
+  to { transform: rotate(360deg); }
 }

@@ -26,3 +26,5 @@ pnpm-debug.log*
 .cursor/
 .kiro/
 .codebuddy/
+.reasonix/
+reasonix.toml

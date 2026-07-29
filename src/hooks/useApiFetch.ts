@@ -37,11 +37,15 @@ export function useApiFetch(options: ApiFetchOptions = {}) {
     const res = await serverFetch(baseUrl, path, init, activeServer.token);
 
     if (handleLicense && (res.status === 403 || res.status === 503)) {
-      setGate({ noLicense: true, featureNotEnabled: false });
+      const newGate = { noLicense: true, featureNotEnabled: false };
+      setGate(newGate);
+      gateRef.current = newGate;
       return null;
     }
     if (handleFeature && res.status === 404) {
-      setGate({ noLicense: false, featureNotEnabled: true });
+      const newGate = { noLicense: false, featureNotEnabled: true };
+      setGate(newGate);
+      gateRef.current = newGate;
       return null;
     }
     if (init?.raw) return res;
@@ -57,12 +61,7 @@ export function useApiFetch(options: ApiFetchOptions = {}) {
   const apiJson = useCallback(async (path: string, init?: RequestInit) => {
     const data = await apiFetch(path, init);
     if (data === null) {
-      const currentGate = gateRef.current;
-      throw new Error(
-        currentGate.noLicense ? 'No valid license' :
-        currentGate.featureNotEnabled ? 'Feature not enabled' :
-        'Request returned empty response'
-      );
+      return null;
     }
     return data;
   }, [apiFetch]);

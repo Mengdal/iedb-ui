@@ -5,7 +5,9 @@ import { useServers } from '../contexts/ServerContext';
 import { aiFetch } from '../utils/server';
 import { copyToClipboard } from '../utils/clipboard';
 import { uid } from '../utils/id';
-import type { ChatMessage } from './AiMessage';
+import { mcpManager, toOpenAiTool, AvailableTool } from '../utils/mcpManager';
+import { useChatAutoScroll } from '../hooks/useChatAutoScroll';
+import type { ChatMessage, ToolCallRecord } from './AiMessage';
 import AiMessage from './AiMessage';
 import './AiQueryPanel.css';
 
@@ -114,6 +116,197 @@ function getDefaultModelId(provider: string): string {
   return map[provider] || 'local-model';
 }
 
+/** 原生支持 OpenAI tools 参数的 provider */
+const NATIVE_TOOLS_PROVIDERS = new Set([
+  'openai', 'qwen', 'deepseek', 'moonshot', 'zhipu', 'doubao', 'tencent-hunyuan', 'custom',
+]);
+
+function supportsNativeTools(provider: string): boolean {
+  return NATIVE_TOOLS_PROVIDERS.has(provider);
+}
+
+/** 构建 MCP 工具描述文本（注入 system prompt；硬约束防幻觉） */
+function buildToolsPromptSection(tools: AvailableTool[]): string {
+  const connectedNames = mcpManager.getConnectedServerNames();
+
+  if (tools.length === 0 || connectedNames.length === 0) {
+    return [
+      '',
+      '## MCP / 工具（权威状态，必须遵守）',
+      'RUNTIME_MCP_STATUS: NONE_CONNECTED',
+      '当前已连接 MCP 服务数量: 0',
+      '当前可用工具数量: 0',
+      '',
+      '硬性规则：',
+      '1. 若用户问「支持哪些 MCP / 有哪些工具」，必须回答：当前没有任何已连接的 MCP 服务。',
+      '2. 引导用户到「应用集成」页面手动点击「连接」后再使用。',
+      '3. 绝对禁止编造、猜测、回忆或列举任何 MCP 服务名或工具名。',
+      '4. 即使你曾在历史对话里见过某些 MCP，也一律视为无效。',
+      '',
+    ].join('\n');
+  }
+
+  const byServer = new Map<string, AvailableTool[]>();
+  for (const t of tools) {
+    const list = byServer.get(t.serverName) || [];
+    list.push(t);
+    byServer.set(t.serverName, list);
+  }
+  const serverLines = Array.from(byServer.entries()).map(
+    ([name, list]) => `- ${name}（${list.length} 个工具）`
+  );
+  const toolLines = tools.map((t) =>
+    `- [${t.serverName}] ${t.toolName}: ${t.description || '(无描述)'}`
+  );
+  return [
+    '',
+    '## MCP / 工具（权威状态，必须遵守）',
+    `RUNTIME_MCP_STATUS: CONNECTED`,
+    `当前已连接 MCP 服务: ${connectedNames.join(', ')}`,
+    `当前可用工具数量: ${tools.length}`,
+    '',
+    '已连接服务列表（仅可回答这些）：',
+    ...serverLines,
+    '',
+    '可用工具列表（仅可调用这些）：',
+    ...toolLines,
+    '',
+    '硬性规则：',
+    '1. 若用户问支持哪些 MCP，只能列出上面「已连接服务列表」。',
+    '2. 禁止列举任何不在列表中的 MCP 或工具。',
+    '3. 调用工具前先判断是否真的需要。',
+    '',
+  ].join('\n');
+}
+
+/** 降级模式：从 LLM 文本输出中解析工具调用 JSON */
+function parsePromptToolCalls(
+  text: string,
+  tools: AvailableTool[]
+): Array<{ id: string; toolUid: string; args: Record<string, unknown> }> {
+  const results: Array<{ id: string; toolUid: string; args: Record<string, unknown> }> = [];
+  // 匹配 ```json ... ``` 或裸 JSON 对象，含 "tool" / "name" 字段
+  const jsonRegex = /```(?:json)?\s*([\s\S]*?)```|(\{[^{}]*"tool"[\s\S]*?\})/g;
+  let m: RegExpExecArray | null;
+  let idx = 0;
+  while ((m = jsonRegex.exec(text)) !== null) {
+    const raw = (m[1] || m[2] || '').trim();
+    if (!raw) continue;
+    try {
+      const obj = JSON.parse(raw);
+      const name = obj.tool || obj.name;
+      if (!name) continue;
+      // 支持用户写 serverName.toolName 或直接 uid
+      const matched = tools.find(
+        (t) => t.uid === name || `${t.serverName}.${t.toolName}` === name || t.toolName === name
+      );
+      if (!matched) continue;
+      const args = (obj.args || obj.arguments || obj.parameters || {}) as Record<string, unknown>;
+      results.push({ id: `prompt_call_${idx++}`, toolUid: matched.uid, args });
+    } catch {
+      /* ignore malformed */
+    }
+  }
+  return results;
+}
+
+interface StreamChunk {
+  content: string;
+  reasoning: string;
+  toolCalls: Array<{
+    id: string;
+    toolUid: string;
+    args: Record<string, unknown>;
+  }>;
+  usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null;
+}
+
+/** 读取流式响应，聚合 content / reasoning / tool_calls */
+async function readStream(
+  response: Response,
+  onChunk: (chunk: { content: string; reasoning: string }) => void,
+  signal: AbortSignal
+): Promise<StreamChunk> {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullContent = '';
+  let fullReasoning = '';
+  const toolCallMap = new Map<number, { id: string; toolUid: string; argsStr: string }>();
+  let usage: StreamChunk['usage'] = null;
+
+  while (true) {
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data: ')) continue;
+      const data = trimmed.slice(6);
+      if (data === '[DONE]') {
+        const toolCalls = Array.from(toolCallMap.values()).map((tc) => {
+          let args: Record<string, unknown> = {};
+          try {
+            args = tc.argsStr ? JSON.parse(tc.argsStr) : {};
+          } catch {
+            /* ignore */
+          }
+          return { id: tc.id, toolUid: tc.toolUid, args };
+        });
+        return { content: fullContent, reasoning: fullReasoning, toolCalls, usage };
+      }
+      try {
+        const parsed = JSON.parse(data);
+        const delta = parsed.choices?.[0]?.delta;
+        const reasoningDelta = delta?.reasoning_content;
+        if (reasoningDelta) fullReasoning += reasoningDelta;
+        const contentDelta = delta?.content;
+        if (contentDelta) {
+          fullContent += contentDelta;
+          onChunk({ content: fullContent, reasoning: fullReasoning });
+        }
+        // 原生 tool_calls 流式片段
+        const tcs = delta?.tool_calls;
+        if (Array.isArray(tcs)) {
+          for (const tc of tcs) {
+            const idx: number = tc.index ?? 0;
+            const existing = toolCallMap.get(idx);
+            const fn = tc.function || {};
+            if (!existing) {
+              toolCallMap.set(idx, {
+                id: tc.id || `call_${idx}`,
+                toolUid: fn.name || '',
+                argsStr: fn.arguments || '',
+              });
+            } else {
+              if (fn.name) existing.toolUid = fn.name;
+              if (fn.arguments) existing.argsStr += fn.arguments;
+            }
+          }
+        }
+        if (parsed.usage) usage = parsed.usage;
+      } catch {
+        /* ignore malformed JSON */
+      }
+    }
+  }
+
+  const toolCalls = Array.from(toolCallMap.values()).map((tc) => {
+    let args: Record<string, unknown> = {};
+    try {
+      args = tc.argsStr ? JSON.parse(tc.argsStr) : {};
+    } catch {
+      /* ignore */
+    }
+    return { id: tc.id, toolUid: tc.toolUid, args };
+  });
+  return { content: fullContent, reasoning: fullReasoning, toolCalls, usage };
+}
+
 /** 构建系统提示词 */
 function buildSystemPrompt(
   selectedDb: string,
@@ -145,7 +338,6 @@ function buildSystemPrompt(
     `- ONLY output SELECT statements. Never output INSERT/UPDATE/DELETE/DDL.`,
     `- When a query uses a SINGLE table (no JOIN), do NOT prefix column names with the table name.`,
     `  Example: write \`AVG(usage)\` not \`AVG(cpu.usage)\`.`,
-    `- Always include a time filter using \`time >= now() - interval '...' \` unless user specifies otherwise.`,
     `- Default to \`LIMIT 1000\` unless user specifies a different limit.`,
     `- Format SQL nicely with proper indentation.`,
     `- When explaining results, be concise and highlight key insights.`,
@@ -218,15 +410,21 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
   // ---- Refs ----
   const abortControllerRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const inputContainerRef = useRef<HTMLDivElement>(null);
 
-  // ---- Auto scroll to bottom ----
-  useEffect(() => {
-    const container = inputContainerRef.current;
-    if (container) {
-      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
-    }
-  }, [messages, isStreaming]);
+  // 对话列表滚动（useChatAutoScroll）：contentKey 跟最新一条变化；中间增高靠 ResizeObserver
+  const lastMsg = messages[messages.length - 1];
+  const chatScrollKey = `${messages.length}:${lastMsg?.id ?? ''}:${lastMsg?.content?.length ?? 0}:${lastMsg?.status ?? ''}:${lastMsg?.toolCalls?.length ?? 0}:${isStreaming}`;
+  const {
+    scrollerRef,
+    setContentNode,
+    showJumpToBottom,
+    onScroll: onChatScroll,
+    onWheel: onChatWheel,
+    onTouchStart: onChatTouchStart,
+    onTouchMove: onChatTouchMove,
+    jumpToBottom,
+    enableStick,
+  } = useChatAutoScroll(chatScrollKey);
 
   // ---- Focus textarea on open ----
   useEffect(() => {
@@ -303,6 +501,10 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
       // 延迟一下确保面板完全打开
       setTimeout(() => {
         setInputValue(presetQuestion);
+        // 未选数据库：只填入输入框，不自动发送
+        if (!selectedDb) {
+          return;
+        }
         // 自动发送预设问题
         const question = presetQuestion.trim();
         const config = getProviderConfig();
@@ -310,6 +512,9 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
           setShowConfigWarning(true);
           return;
         }
+
+        // 新一轮生成：开启自动滚底
+        enableStick();
 
         const userMsg: ChatMessage = {
           id: uid(),
@@ -331,7 +536,7 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
         const systemPrompt = buildSystemPrompt(
           selectedDb, databases, tableSchemas, measurements, config.customInstructions
         );
-        const apiMessages: Array<{ role: string; content: string }> = [
+        const apiMessages: Array<Record<string, unknown>> = [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: question },
         ];
@@ -354,161 +559,266 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
     }
   }, [open, presetInput]);
 
+  // ---- 引用错误时：输入框默认填入分析提示（错误本身在 chip 附件里，不占输入框） ----
+  const hasFilledErrorPrompt = useRef<string | null>(null);
+  useEffect(() => {
+    if (!open || !errorContext?.trim()) {
+      if (!errorContext) hasFilledErrorPrompt.current = null;
+      return;
+    }
+    // 同一条错误只自动填一次；用户已输入则不覆盖
+    if (hasFilledErrorPrompt.current === errorContext) return;
+    hasFilledErrorPrompt.current = errorContext;
+    setInputValue((prev) => {
+      if (prev.trim()) return prev;
+      return t(
+        'ai.errorFixPrompt',
+        '请分析这个 SQL 错误的原因，并给出修复后的完整 SQL。'
+      );
+    });
+    setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 100);
+  }, [open, errorContext, t]);
+
   // ---- Streaming logic ----
+  // conversationMessages 支持原生 tool calling 的完整消息格式
   const streamResponse = useCallback(async (
-    conversationMessages: Array<{ role: string; content: string }>,
+    conversationMessagesIn: Array<Record<string, unknown>>,
     assistantMsgId: string
   ) => {
     if (!activeServer) return;
 
     const config = getProviderConfig();
     const modelId = config.model || getDefaultModelId(config.provider);
-    // 直接调用 AI 提供商的 API，而不是走 IotEdge 数据库服务器
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
-
     setIsStreaming(true);
 
+    // 只使用「当前已连接」的 MCP 工具，绝不自动连接任何服务。
+    // 否则 AI 一对话就会把 enabled 的服务全部连上，覆盖用户的断开操作。
+    // 用户需在「应用集成」页手动连接后，工具才会出现在这里。
+    const availableTools: AvailableTool[] = mcpManager.getAvailableTools();
+    const nativeTools = supportsNativeTools(config.provider) && availableTools.length > 0;
+    const openaiTools = nativeTools ? availableTools.map(toOpenAiTool) : undefined;
+
+    // 注入工具提示到 system 消息（始终注入，无工具时明确告知「没有已连接的 MCP」）
+    let conversationMessages = [...conversationMessagesIn];
+    const toolsPrompt = buildToolsPromptSection(availableTools);
+    if (conversationMessages.length > 0 && conversationMessages[0].role === 'system') {
+      const sysContent = String(conversationMessages[0].content || '');
+      const extra =
+        nativeTools
+          ? toolsPrompt
+          : availableTools.length > 0
+          ? `${toolsPrompt}\n## 工具调用方式（本模型不支持原生 function calling）\n需要调用工具时，输出如下 JSON 代码块（可多个）：\n\`\`\`json\n{"tool":"<工具名>","args":{...}}\n\`\`\`\n我会执行工具并把结果回传给你，你再继续回答。\n`
+          : toolsPrompt;
+      conversationMessages[0] = { ...conversationMessages[0], content: sysContent + extra };
+    }
+
+    const MAX_TOOL_ROUNDS = 5;
+    let allToolRecords: ToolCallRecord[] = [];
+    let finalContent = '';
+    let finalReasoning = '';
+    let totalUsage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null = null;
+    const startTime = Date.now();
+
+    const updateMsg = (patch: Partial<ChatMessage>) => {
+      setMessages(prev => prev.map(m =>
+        m.id === assistantMsgId ? { ...m, ...patch } as ChatMessage : m
+      ));
+    };
+
+    // 追加一条工具调用记录并更新 UI
+    const appendToolRecord = (rec: ToolCallRecord) => {
+      allToolRecords = [...allToolRecords, rec];
+      updateMsg({ toolCalls: allToolRecords });
+    };
+    const updateToolRecord = (recId: string, patch: Partial<ToolCallRecord>) => {
+      allToolRecords = allToolRecords.map(r => r.id === recId ? { ...r, ...patch } : r);
+      updateMsg({ toolCalls: allToolRecords });
+    };
+
     try {
-      const response = await aiFetch(config.baseUrl, '/chat/completions', {
-        apiKey: config.apiKey,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: modelId,
-          messages: conversationMessages,
-          stream: true,
-          temperature: 0,
-          stream_options: { include_usage: true },
-        }),
-        signal: controller.signal,
-      });
+      // ---- Tool calling 循环 ----
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        const response = await aiFetch(config.baseUrl, '/chat/completions', {
+          apiKey: config.apiKey,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: modelId,
+            messages: conversationMessages,
+            stream: true,
+            temperature: 0,
+            stream_options: { include_usage: true },
+            ...(openaiTools ? { tools: openaiTools, tool_choice: 'auto' } : {}),
+          }),
+          signal: controller.signal,
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        throw new Error(
-          response.status === 404
-            ? t('ai.apiNotFound', 'AI 服务端点未找到，请检查集成配置')
-            : response.status === 401
-            ? t('ai.apiUnauthorized', 'API Key 无效，请检查配置')
-            : `${response.status} ${response.statusText}${errorText ? ': ' + errorText : ''}`
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => '');
+          throw new Error(
+            response.status === 404
+              ? t('ai.apiNotFound', 'AI 服务端点未找到，请检查集成配置')
+              : response.status === 401
+              ? t('ai.apiUnauthorized', 'API Key 无效，请检查配置')
+              : `${response.status} ${response.statusText}${errorText ? ': ' + errorText : ''}`
+          );
+        }
+
+        // 读取流式响应
+        const chunk = await readStream(
+          response,
+          ({ content, reasoning }) => {
+            updateMsg({ content, reasoning: reasoning || undefined, status: 'streaming' });
+          },
+          controller.signal
         );
-      }
 
-      const reader = response.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let fullContent = '';
-      let fullReasoning = '';
-      let usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null = null;
-      const startTime = Date.now();
+        finalContent = chunk.content;
+        finalReasoning = chunk.reasoning;
+        if (chunk.usage) totalUsage = chunk.usage;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        // 解析本轮工具调用
+        let toolCallsThisRound: Array<{ id: string; toolUid: string; args: Record<string, unknown> }> = [];
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) continue;
-
-          const data = trimmed.slice(6);
-          if (data === '[DONE]') {
-            // Stream complete
-            const duration = (Date.now() - startTime) / 1000;
-            const completionTokens = usage?.completion_tokens || 0;
-            const totalTokens = usage?.total_tokens || 0;
-            const tokensPerSecond = duration > 0 && completionTokens > 0 ? Math.round(completionTokens / duration) : 0;
-            setMessages(prev => prev.map(m =>
-              m.id === assistantMsgId
-                ? {
-                    ...m,
-                    content: fullContent,
-                    reasoning: fullReasoning || undefined,
-                    status: 'complete' as const,
-                    meta: { model: modelId, totalTokens, tokensPerSecond },
-                  }
-                : m
-            ));
-            setIsStreaming(false);
-            return;
+        if (nativeTools) {
+          toolCallsThisRound = chunk.toolCalls;
+        } else if (availableTools.length > 0) {
+          // 降级模式：从文本中解析工具调用 JSON
+          toolCallsThisRound = parsePromptToolCalls(chunk.content, availableTools);
+          // 如果解析到工具调用，清除文本中的工具调用 JSON 片段，避免展示噪声
+          if (toolCallsThisRound.length > 0) {
+            finalContent = finalContent
+              .replace(/```(?:json)?\s*[\s\S]*?```/g, '')
+              .replace(/\{[^{}]*"tool"[\s\S]*?\}/g, '')
+              .trim();
+            updateMsg({ content: finalContent, status: 'streaming' });
           }
+        }
 
-          try {
-            const parsed = JSON.parse(data);
-            const reasoningDelta = parsed.choices?.[0]?.delta?.reasoning_content;
-            if (reasoningDelta) {
-              fullReasoning += reasoningDelta;
+        // 没有工具调用，结束循环
+        if (toolCallsThisRound.length === 0) {
+          break;
+        }
+
+        // 追加 assistant 消息（含 tool_calls）到对话
+        if (nativeTools) {
+          conversationMessages = [
+            ...conversationMessages,
+            {
+              role: 'assistant',
+              content: finalContent || '',
+              tool_calls: chunk.toolCalls.map(tc => ({
+                id: tc.id,
+                type: 'function',
+                function: { name: tc.toolUid, arguments: JSON.stringify(tc.args) },
+              })),
+            },
+          ];
+        } else {
+          // 降级模式：assistant 文本已经包含工具调用意图，直接追加
+          conversationMessages = [
+            ...conversationMessages,
+            { role: 'assistant', content: finalContent },
+          ];
+        }
+
+        // 并行执行所有工具调用
+        // 选中库由代码注入（参数 + x-iedb-database 头），不依赖模型是否记得传 database
+        const toolResults = await Promise.all(
+          toolCallsThisRound.map(async (tc) => {
+            // 查找工具元信息
+            const meta = availableTools.find(t => t.uid === tc.toolUid);
+            const recId = uid();
+            const rec: ToolCallRecord = {
+              id: recId,
+              toolUid: tc.toolUid,
+              serverName: meta?.serverName || '?',
+              toolName: meta?.toolName || tc.toolUid,
+              args: tc.args,
+              status: 'running',
+            };
+            appendToolRecord(rec);
+            const t0 = Date.now();
+            try {
+              const result = await mcpManager.callToolByUid(tc.toolUid, tc.args, {
+                database: selectedDb,
+              });
+              const durationMs = Date.now() - t0;
+              // 展示实际发出的参数（含注入后的 database）
+              updateToolRecord(recId, {
+                status: result.ok ? 'success' : 'error',
+                args: result.args,
+                result: result.text,
+                error: result.isError ? result.text : undefined,
+                durationMs,
+              });
+              return { id: tc.id, toolUid: tc.toolUid, content: result.text, isError: result.isError };
+            } catch (err: any) {
+              const durationMs = Date.now() - t0;
+              const errMsg = err?.message || String(err);
+              updateToolRecord(recId, { status: 'error', error: errMsg, durationMs });
+              return { id: tc.id, toolUid: tc.toolUid, content: `工具调用失败: ${errMsg}`, isError: true };
             }
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) {
-              fullContent += delta;
-            }
-            if (parsed.usage) {
-              usage = parsed.usage;
-            }
-            if (delta || reasoningDelta) {
-              setMessages(prev => prev.map(m =>
-                m.id === assistantMsgId
-                  ? { ...m, content: fullContent, reasoning: fullReasoning || undefined, status: 'streaming' as const }
-                  : m
-              ));
-            }
-          } catch {
-            // Ignore malformed JSON in stream chunks
+          })
+        );
+
+        // 追加 tool 结果消息
+        if (nativeTools) {
+          for (const tr of toolResults) {
+            conversationMessages = [
+              ...conversationMessages,
+              { role: 'tool', tool_call_id: tr.id, content: tr.content },
+            ];
           }
+        } else {
+          // 降级模式：把工具结果以 user 消息形式回传
+          const resultText = toolResults
+            .map(tr => `[工具 ${tr.toolUid} 返回]: ${tr.content}`)
+            .join('\n\n');
+          conversationMessages = [
+            ...conversationMessages,
+            { role: 'user', content: `[工具调用结果]\n${resultText}\n\n请根据以上工具返回结果继续回答用户问题。` },
+          ];
+          // 降级模式下一轮需要清空 finalContent，让模型重新生成
+          finalContent = '';
+          updateMsg({ content: '', status: 'streaming' });
         }
       }
 
-      // If loop exits without [DONE], still mark complete
-      {
-        const duration = (Date.now() - startTime) / 1000;
-        const completionTokens = usage?.completion_tokens || 0;
-        const totalTokens = usage?.total_tokens || 0;
-        const tokensPerSecond = duration > 0 && completionTokens > 0 ? Math.round(completionTokens / duration) : 0;
-        setMessages(prev => prev.map(m =>
-          m.id === assistantMsgId
-            ? {
-                ...m,
-                content: fullContent,
-                reasoning: fullReasoning || undefined,
-                status: 'complete' as const,
-                meta: { model: modelId, totalTokens, tokensPerSecond },
-              }
-            : m
-        ));
-      }
+      // ---- 完成 ----
+      const duration = (Date.now() - startTime) / 1000;
+      const completionTokens = totalUsage?.completion_tokens || 0;
+      const totalTokens = totalUsage?.total_tokens || 0;
+      const tokensPerSecond = duration > 0 && completionTokens > 0 ? Math.round(completionTokens / duration) : 0;
+      updateMsg({
+        content: finalContent,
+        reasoning: finalReasoning || undefined,
+        status: 'complete',
+        toolCalls: allToolRecords.length > 0 ? allToolRecords : undefined,
+        meta: { model: modelId, totalTokens, tokensPerSecond },
+      });
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        // User cancelled
-        setMessages(prev => prev.map(m =>
-          m.id === assistantMsgId
-            ? { ...m, status: 'aborted' as const }
-            : m
-        ));
+        updateMsg({ status: 'aborted' });
       } else {
-        setMessages(prev => prev.map(m =>
-          m.id === assistantMsgId
-            ? { ...m, status: 'error' as const, error: err.message || String(err) }
-            : m
-        ));
+        updateMsg({ status: 'error', error: err.message || String(err) });
       }
     } finally {
       setIsStreaming(false);
       abortControllerRef.current = null;
     }
-  }, [activeServer, t]);
+  }, [activeServer, selectedDb, t]);
 
   // ---- Send message ----
   const handleSend = useCallback(async () => {
     const trimmed = inputValue.trim();
     if (!trimmed || isStreaming) return;
+
+    // 未选数据库：禁止询问 AI（顶部已有提示）
+    if (!selectedDb) return;
 
     const config = getProviderConfig();
     if (!config.baseUrl) {
@@ -517,6 +827,8 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
     }
 
     setInputValue('');
+    // 用户主动发送：重新开启自动滚底，便于看新回复
+    enableStick();
 
     if (!activeConvId) {
       setActiveConvId(uid());
@@ -566,7 +878,7 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
       config.customInstructions
     );
 
-    const apiMessages: Array<{ role: string; content: string }> = [
+    const apiMessages: Array<Record<string, unknown>> = [
       { role: 'system', content: systemPrompt },
     ];
 
@@ -594,7 +906,7 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
     }
 
     await streamResponse(apiMessages, assistantMsg.id);
-  }, [inputValue, isStreaming, selectedDb, databases, tableSchemas, measurements, messages, streamResponse, sqlContext, onClearSqlContext, activeConvId]);
+  }, [inputValue, isStreaming, selectedDb, databases, tableSchemas, measurements, messages, streamResponse, sqlContext, onClearSqlContext, activeConvId, enableStick, errorContext, onClearErrorContext]);
 
   // ---- Stop generation ----
   const handleStopGeneration = useCallback(() => {
@@ -604,6 +916,10 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
   // ---- Retry last message ----
   const handleRetry = useCallback(async () => {
     if (messages.length < 2) return;
+    if (!selectedDb) return;
+
+    // 重试视为新一轮生成：重新开启跟滚
+    enableStick();
 
     // Remove the failed assistant message
     setMessages(prev => {
@@ -625,7 +941,7 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
         selectedDb, databases, tableSchemas, measurements, config.customInstructions
       );
 
-      const apiMessages: Array<{ role: string; content: string }> = [
+      const apiMessages: Array<Record<string, unknown>> = [
         { role: 'system', content: systemPrompt },
       ];
       const recentMessages = updated.slice(-20);
@@ -649,18 +965,23 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
       streamResponse(apiMessages, assistantMsg.id);
       return [...updated, assistantMsg];
     });
-  }, [messages, selectedDb, databases, tableSchemas, measurements, streamResponse]);
+  }, [messages, selectedDb, databases, tableSchemas, measurements, streamResponse, enableStick]);
 
   // ---- Edit & resend a user message ----
   const handleEditMessage = useCallback(async (messageId: string, newContent: string) => {
     const trimmed = newContent.trim();
     if (!trimmed || isStreaming) return;
 
+    if (!selectedDb) return;
+
     const config = getProviderConfig();
     if (!config.baseUrl) {
       setShowConfigWarning(true);
       return;
     }
+
+    // 编辑重发：重新开启跟滚
+    enableStick();
 
     const editIdx = messages.findIndex(m => m.id === messageId);
     if (editIdx < 0) return;
@@ -690,7 +1011,7 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
     setMessages([...keptMessages, userMsg, assistantMsg]);
 
     const systemPrompt = buildSystemPrompt(selectedDb, databases, tableSchemas, measurements, config.customInstructions);
-    const apiMessages: Array<{ role: string; content: string }> = [
+    const apiMessages: Array<Record<string, unknown>> = [
       { role: 'system', content: systemPrompt },
     ];
     const recentMessages = [...keptMessages, userMsg].slice(-20);
@@ -712,7 +1033,7 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
     }
 
     await streamResponse(apiMessages, assistantMsg.id);
-  }, [messages, isStreaming, selectedDb, databases, tableSchemas, measurements, streamResponse]);
+  }, [messages, isStreaming, selectedDb, databases, tableSchemas, measurements, streamResponse, enableStick]);
 
   // ---- Copy SQL ----
   const handleCopySql = useCallback(async (sql: string) => {
@@ -786,11 +1107,12 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
   const handleLoadConversation = useCallback((conv: SavedConversation) => {
     abortControllerRef.current?.abort();
     setIsStreaming(false);
+    enableStick();
     setMessages(conv.messages);
     setInputValue('');
     setActiveConvId(conv.id);
     setShowHistory(false);
-  }, []);
+  }, [enableStick]);
 
   const handleDeleteConversation = useCallback((convId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -851,14 +1173,15 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   }, []);
 
-  // ---- i18n helper ----
-  const tn = useCallback((key: string) => t(key), [t]);
-
   // Don't render fully hidden
   if (animPhase === 'hidden') return null;
 
   const hasMessages = messages.length > 0;
-  const canSend = inputValue.trim().length > 0 && !isStreaming && aiStatus !== 'failed';
+  const canSend =
+    inputValue.trim().length > 0 &&
+    !isStreaming &&
+    aiStatus !== 'failed' &&
+    !!selectedDb;
 
   const welcomeSuggestions = [
     t('ai.suggestion1'),
@@ -869,7 +1192,7 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
   ];
 
   return (
-    <div className="ai-panel-overlay ai-panel-nonblocking">
+    <div className="ai-panel-overlay">
       <div className={`ai-panel ai-panel-${animPhase}`} onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="ai-panel-header">
@@ -953,7 +1276,7 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
                     </div>
                     <div className="ai-history-item-meta">
                       <span className="ai-history-item-msgs">
-                        {t('ai.messages', { count: conv.messages.filter(m => m.role !== 'system').length })}
+                        {t('ai.messages', { count: conv.messages.length })}
                       </span>
                       <button
                         className="ai-history-item-delete"
@@ -984,8 +1307,8 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
           </div>
         )}
 
-        {/* Database context badge */}
-        {selectedDb && (
+        {/* Database context badge / 未选库提示 */}
+        {selectedDb ? (
           <div className="ai-db-badge">
             <span className="ai-db-badge-label">{t('ai.currentDb', '当前数据库')}:</span>
             <span className="ai-db-badge-name">{selectedDb}</span>
@@ -993,80 +1316,107 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
               ({measurements.length} {t('ai.tables', '张表')})
             </span>
           </div>
+        ) : (
+          <div className="ai-config-warning">
+            <AlertTriangle size={16} />
+            <span>{t('ai.selectDbFirst', '请先选择数据库')}</span>
+          </div>
         )}
 
         {/* Messages area */}
-        <div className="ai-messages-area" ref={inputContainerRef}>
-          {!hasMessages ? (
-            /* Welcome screen */
-            <div className="ai-welcome">
-              <div className="ai-welcome-icon">
-                <Sparkles size={32} />
-              </div>
-              <h3 className="ai-welcome-title">{t('ai.welcomeTitle', 'AI 查询助手')}</h3>
-              <p className="ai-welcome-desc">
-                {selectedDb
-                  ? t('ai.welcomeDesc', '用自然语言描述你的查询需求，我将为你生成精确的 SQL。')
-                  : t('ai.welcomeNoDb', '请先在左侧选择一个数据库，然后我就可以帮你查询数据了。')}
-              </p>
-
-              {selectedDb && (
-                <div className="ai-welcome-context">
-                  <p>{t('ai.contextInfo', '我可以访问以下数据库表的信息来生成准确的查询：')}</p>
-                  <div className="ai-welcome-tables">
-                    {measurements.slice(0, 8).map(m => (
-                      <span key={m.name} className="ai-table-tag">
-                        {m.name}
-                        {tableSchemas[m.name] && (
-                          <span className="ai-table-tag-cols">
-                            ({tableSchemas[m.name].tags.length + tableSchemas[m.name].fields.length})
-                          </span>
-                        )}
-                      </span>
-                    ))}
-                    {measurements.length > 8 && (
-                      <span className="ai-table-tag ai-table-more">
-                        +{measurements.length - 8} more
-                      </span>
-                    )}
-                  </div>
+        <div className="ai-messages-area-wrap">
+          <div
+            className="ai-messages-area"
+            ref={scrollerRef}
+            onScroll={onChatScroll}
+            onWheel={onChatWheel}
+            onTouchStart={onChatTouchStart}
+            onTouchMove={onChatTouchMove}
+          >
+            <div className="ai-messages-content" ref={setContentNode}>
+            {!hasMessages ? (
+              /* Welcome screen */
+              <div className="ai-welcome">
+                <div className="ai-welcome-icon">
+                  <Sparkles size={32} />
                 </div>
-              )}
-
-              <div className="ai-welcome-suggestions">
-                <p className="ai-suggestions-label">
-                  {t('ai.tryAsking', '试试这样问我：')}
+                <h3 className="ai-welcome-title">{t('ai.welcomeTitle', 'AI 查询助手')}</h3>
+                <p className="ai-welcome-desc">
+                  {selectedDb
+                    ? t('ai.welcomeDesc', '用自然语言描述你的查询需求，我将为你生成精确的 SQL。')
+                    : t('ai.welcomeNoDb', '请先在左侧选择一个数据库，然后我就可以帮你查询数据了。')}
                 </p>
-                {welcomeSuggestions.map((suggestion, idx) => (
-                  <button
-                    key={idx}
-                    className="ai-suggestion-chip"
-                    onClick={() => handleSuggestionClick(suggestion)}
-                    disabled={!selectedDb}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
+
+                {selectedDb && (
+                  <div className="ai-welcome-context">
+                    <p>{t('ai.contextInfo', '我可以访问以下数据库表的信息来生成准确的查询：')}</p>
+                    <div className="ai-welcome-tables">
+                      {measurements.slice(0, 8).map(m => (
+                        <span key={m.name} className="ai-table-tag">
+                          {m.name}
+                          {tableSchemas[m.name] && (
+                            <span className="ai-table-tag-cols">
+                              ({tableSchemas[m.name].tags.length + tableSchemas[m.name].fields.length})
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                      {measurements.length > 8 && (
+                        <span className="ai-table-tag ai-table-more">
+                          +{measurements.length - 8} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="ai-welcome-suggestions">
+                  <p className="ai-suggestions-label">
+                    {t('ai.tryAsking', '试试这样问我：')}
+                  </p>
+                  {welcomeSuggestions.map((suggestion, idx) => (
+                    <button
+                      key={idx}
+                      className="ai-suggestion-chip"
+                      onClick={() => handleSuggestionClick(suggestion)}
+                      disabled={!selectedDb}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
               </div>
+            ) : (
+              /* Message list */
+              <>
+                {messages.map((msg) => (
+                  <AiMessage
+                    key={msg.id}
+                    message={msg}
+                    onCopySql={handleCopySql}
+                    onInsertSql={handleInsertSql}
+                    onRunSql={handleRunSql}
+                    onRetry={handleRetry}
+                    t={t}
+                    editorSql={editorSql}
+                    onAcceptSql={onAcceptSql}
+                    onEditMessage={handleEditMessage}
+                  />
+                ))}
+              </>
+            )}
             </div>
-          ) : (
-            /* Message list */
-            <>
-              {messages.map((msg) => (
-                <AiMessage
-                  key={msg.id}
-                  message={msg}
-                  onCopySql={handleCopySql}
-                  onInsertSql={handleInsertSql}
-                  onRunSql={handleRunSql}
-                  onRetry={handleRetry}
-                  t={tn}
-                  editorSql={editorSql}
-                  onAcceptSql={onAcceptSql}
-                  onEditMessage={handleEditMessage}
-                />
-              ))}
-            </>
+          </div>
+          {showJumpToBottom && hasMessages && (
+            <button
+              type="button"
+              className="ai-scroll-to-bottom"
+              onClick={jumpToBottom}
+              title={t('ai.scrollToBottom', '回到底部')}
+            >
+              ↓ {t('ai.scrollToBottom', '回到底部')}
+              {isStreaming ? ` · ${t('ai.thinking', '生成中...')}` : ''}
+            </button>
           )}
         </div>
 
@@ -1121,11 +1471,7 @@ const AiQueryPanel: React.FC<AiQueryPanelProps> = ({
               value={inputValue}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder={
-                selectedDb
-                  ? t('ai.inputPlaceholder', '描述你想查询的数据... (Enter 发送)')
-                  : t('ai.selectDbFirst', '请先选择数据库')
-              }
+              placeholder={t('ai.inputPlaceholder', '描述你想查询的数据... (Enter 发送)')}
               disabled={isStreaming || !selectedDb || aiStatus === 'failed'}
               rows={1}
             />

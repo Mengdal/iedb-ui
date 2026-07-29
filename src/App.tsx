@@ -21,6 +21,7 @@ import AuditLog from './views/AuditLog';
 import QueryManagement from './views/QueryManagement';
 import './views/PageLayout.css';
 import './App.css';
+import { mcpManager } from './utils/mcpManager';
 
 export type CurrentView =
   | 'overview'
@@ -72,6 +73,13 @@ function App() {
     }
   });
 
+  // 刷新后恢复用户已启用（enabled=true）的 MCP 连接
+  useEffect(() => {
+    mcpManager.restoreEnabledConnections().catch(() => {
+      /* 个别 MCP 连不上不影响应用启动 */
+    });
+  }, []);
+
   const handleCloseWelcome = () => {
     setShowWelcome(false);
     try {
@@ -90,9 +98,9 @@ function App() {
         <div style={{ padding: '60px 20px', maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
           <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '40px' }}>
             <Database size={48} color="#3b82f6" style={{ marginBottom: 16 }} />
-            <h2 style={{ fontSize: '24px', fontWeight: 600, margin: '0 0 12px 0' }}>{t('views.databases.noServerTitle', 'No Server Connected')}</h2>
+            <h2 style={{ fontSize: '24px', fontWeight: 600, margin: '0 0 12px 0' }}>{t('views.databases.noServer')}</h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '15px', lineHeight: 1.5, marginBottom: '24px' }}>
-              {t('views.databases.noServerHint', 'Please select an active server from the sidebar.')}
+              {t('views.databases.noServerDesc')}
             </p>
             <button className="btn btn-primary" onClick={() => setCurrentView('servers')}>
               <Plus size={16} />
