@@ -1,0 +1,265 @@
+/* ── Backup Management ──────────────────────────────────── */
+
+/* Progress bar — 复用 RetentionPolicy 的 rp-scheduler-bar 布局，
+   此处仅覆盖进度条细节样式 */
+.backup-progress-track {
+  width: 180px;
+  min-width: 120px;
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.backup-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent-primary), #60a5fa);
+  transition: width 0.5s ease;
+}
+
+.backup-progress-fill.restore {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+/* Backup table column widths */
+/* 操作列按钮固定尺寸，使用固定宽度；其余列按比例分配剩余空间 */
+.backup-col-id { width: 32%; }
+.backup-col-time { width: 18%; }
+.backup-col-type { width: 9%; }
+.backup-col-files { width: 10%; }
+.backup-col-size { width: 12%; }
+.backup-col-actions { width: 110px; }
+
+/* 表头与数据统一居中、不换行（参考数据库测量表页面排版） */
+.backup-table th,
+.backup-table td {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.backup-table td:nth-child(4),
+.backup-table td:nth-child(5) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 备份 ID 列：过长时省略号截断 */
+.backup-table td:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 操作列：按钮组是 flex 布局，需单独居中 */
+.backup-table td:last-child .token-actions {
+  justify-content: center;
+}
+
+/* Backup ID as monospace link */
+.backup-id-link {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 12px;
+  color: var(--accent-primary);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.backup-id-link:hover {
+  text-decoration: underline;
+}
+
+/* License/feature not enabled state */
+.backup-no-license {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+}
+
+.backup-no-license svg {
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.backup-no-license p {
+  font-size: 14px;
+  margin: 0;
+  max-width: 400px;
+  margin-inline: auto;
+  line-height: 1.6;
+}
+
+/* Detail modal info rows */
+.backup-detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.backup-detail-row:last-child {
+  border-bottom: none;
+}
+
+.backup-detail-label {
+  color: var(--text-secondary);
+}
+
+.backup-detail-value {
+  font-weight: 500;
+  text-align: right;
+}
+
+/* Detail modal: database tree */
+.backup-db-tree {
+  margin-top: 8px;
+}
+
+.backup-db-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.backup-db-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.backup-db-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backup-db-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.backup-db-stats {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.backup-db-header .chevron-icon {
+  transition: transform 0.2s;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.backup-db-header .chevron-icon.open {
+  transform: rotate(90deg);
+}
+
+.backup-db-measurements {
+  border-top: 1px solid var(--border-color);
+  padding: 4px 0;
+  animation: backup-fade-in 0.2s ease;
+}
+
+@keyframes backup-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.backup-measurement-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;   /* 与数据库名称左边界对齐（无缩进） */
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.backup-measurement-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backup-measurement-stats {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.backup-measurement-empty {
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Restore modal summary card */
+.backup-restore-info {
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+/* Restore confirm banner */
+.backup-restore-confirm {
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: 6px;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.backup-restore-confirm label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.backup-restore-confirm label span {
+  color: #f59e0b;
+  font-weight: 500;
+}
+
+.backup-restore-confirm input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+}
+
+/* Success banner — 复用插件中心 CQ 页面的成功提示样式 (cq-success-alert) */
+.backup-success-msg {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.1);
+  color: #86efac;
+}
+
+/* Progress icons */
+.backup-progress-icon-success {
+  color: #34d399;
+}
+
+.backup-progress-icon-fail {
+  color: #f87171;
+}
