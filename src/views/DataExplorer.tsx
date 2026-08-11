@@ -65,7 +65,7 @@ function isSqlStatementStart(view: { state: { doc: { line(n: number): { from: nu
 }
 
 /** Build the gutter marker for SQL statement start lines; shows run button, AI button, and error button when there is an active error */
-function createAiGutterMarker(hasError: boolean): GutterMarker {
+function createAiGutterMarker(hasError: boolean, line?: number): GutterMarker {
   return new class extends GutterMarker {
     toDOM() {
       const el = document.createElement('span');
@@ -75,12 +75,14 @@ function createAiGutterMarker(hasError: boolean): GutterMarker {
       runBtn.className = 'cm-run-gutter-btn';
       runBtn.innerHTML = RUN_ICON_SVG;
       runBtn.title = i18n.t('views.dataExplorer.runStatement', '执行此语句');
+      if (line != null) runBtn.dataset.line = String(line);
       el.appendChild(runBtn);
 
       const aiBtn = document.createElement('span');
       aiBtn.className = 'cm-ai-gutter-btn';
       aiBtn.innerHTML = AI_ICON_SVG;
       aiBtn.title = i18n.t('views.dataExplorer.askAi', '向 AI 提问此查询');
+      if (line != null) aiBtn.dataset.line = String(line);
       el.appendChild(aiBtn);
 
       if (hasError) {
@@ -88,6 +90,7 @@ function createAiGutterMarker(hasError: boolean): GutterMarker {
         errBtn.className = 'cm-ai-gutter-error-btn';
         errBtn.innerHTML = ERROR_ICON_SVG;
         errBtn.title = i18n.t('views.dataExplorer.askAiAboutError', '向 AI 询问此错误');
+        if (line != null) errBtn.dataset.line = String(line);
         el.appendChild(errBtn);
       }
 
@@ -117,8 +120,6 @@ function extractStatementAtLine(view: { state: { doc: { line(n: number): { from:
 
 /** Gutter extension factory: show AI icon on SQL statement start lines, and error icon on the specific statement that errored */
 function createAiGutter() {
-  const normalMarker = createAiGutterMarker(false);
-  const errorMarker = createAiGutterMarker(true);
   return gutter({
     class: 'cm-ai-gutter',
     lineMarker(view, line) {
@@ -127,9 +128,9 @@ function createAiGutter() {
       // 仅在出错的语句起始行显示错误按钮
       if (_currentError && _erroredSql) {
         const stmt = extractStatementAtLine(view, lineNum);
-        if (stmt && stmt.trim() === _erroredSql.trim()) return errorMarker;
+        if (stmt && stmt.trim() === _erroredSql.trim()) return createAiGutterMarker(true, lineNum);
       }
-      return normalMarker;
+      return createAiGutterMarker(false, lineNum);
     },
     initialSpacer: () => new class extends GutterMarker {
       toDOM(): HTMLElement { return document.createElement('span'); }
@@ -147,11 +148,18 @@ const aiGutterClickPlugin = ViewPlugin.define((view) => {
     const errBtn = target.closest('.cm-ai-gutter-error-btn');
     if (!runBtn && !aiBtn && !errBtn) return;
     e.preventDefault();
-    // 用坐标定位点击行，避免 gutter DOM 元素索引偏移导致行号错位
-    const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
-    if (pos == null) return;
-    const doc = view.state.doc;
-    const startLineNum = doc.lineAt(pos).number; // 1-indexed
+    // 优先使用按钮上记录的语句起始行号，避免 posAtCoords 在多行语句上因坐标偏移解析到错误的行
+    const lineBtn = target.closest<HTMLElement>('[data-line]');
+    const dataLine = lineBtn?.dataset.line ? Number(lineBtn.dataset.line) : NaN;
+    let startLineNum: number;
+    if (Number.isInteger(dataLine) && dataLine >= 1) {
+      startLineNum = dataLine;
+    } else {
+      // 用坐标定位点击行，避免 gutter DOM 元素索引偏移导致行号错位
+      const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+      if (pos == null) return;
+      startLineNum = view.state.doc.lineAt(pos).number; // 1-indexed
+    }
     const lineText = extractStatementAtLine(view, startLineNum);
     if (runBtn) {
       _onRunGutterClick?.(lineText);

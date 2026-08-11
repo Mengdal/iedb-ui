@@ -1,0 +1,431 @@
+/* ── Cluster Management ───────────────────────────────── */
+
+/* Not enabled state */
+.cluster-no-license {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+}
+
+.cluster-no-license svg {
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.cluster-no-license p {
+  font-size: 14px;
+  margin: 0 auto;
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+/* Overview stat cards */
+.cluster-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.cluster-stat-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cluster-stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.cluster-stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.cluster-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cluster-status-badge.good {
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+}
+
+.cluster-status-badge.bad {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.cluster-status-badge.warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.cluster-status-detail {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* Node table column widths */
+.cluster-col-id { width: 18%; }
+.cluster-col-state { width: 12%; }
+.cluster-col-address { width: 17%; }
+.cluster-col-api { width: 15%; }
+.cluster-col-version { width: 10%; }
+.cluster-col-heartbeat { width: 18%; }
+.cluster-col-actions { width: 110px; }
+
+/* Role groups */
+.cluster-role-group {
+  margin-bottom: 20px;
+}
+
+.cluster-role-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.cluster-role-group-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* State / role badges */
+.cluster-state-badge,
+.cluster-role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cluster-state-badge.healthy {
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+}
+
+.cluster-state-badge.unhealthy {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.cluster-state-badge.dead {
+  background: rgba(107, 114, 128, 0.15);
+  color: #9ca3af;
+}
+
+.cluster-state-badge.unknown {
+  background: rgba(107, 114, 128, 0.15);
+  color: #9ca3af;
+}
+
+.cluster-state-badge.joining {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+}
+
+.cluster-state-badge.leaving {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.cluster-role-badge.writer {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+}
+
+.cluster-role-badge.reader {
+  background: rgba(139, 92, 246, 0.12);
+  color: #a78bfa;
+}
+
+.cluster-role-badge.compactor {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.cluster-role-badge.standalone {
+  background: rgba(107, 114, 128, 0.15);
+  color: #9ca3af;
+}
+
+/* Node table: 表头与数据统一居中、不换行（参考备份管理排版） */
+.cluster-table th,
+.cluster-table td {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.cluster-table td:last-child .token-actions {
+  justify-content: center;
+}
+
+/* Node ID link */
+.cluster-node-id {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 12px;
+  color: var(--accent-primary);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.cluster-node-id:hover {
+  text-decoration: underline;
+}
+
+/* Detail modal info rows */
+.cluster-detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.cluster-detail-row:last-child {
+  border-bottom: none;
+}
+
+.cluster-detail-label {
+  color: var(--text-secondary);
+}
+
+.cluster-detail-value {
+  font-weight: 500;
+  text-align: right;
+}
+
+.cluster-detail-value.mono {
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+/* Capabilities badges */
+.cluster-cap-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.cluster-cap-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.cluster-cap-badge.off {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+}
+
+/* 概览集群信息中的能力行：占满整行、徽标铺开右对齐 */
+.cluster-kv-row .cluster-cap-row {
+  display: flex;            /* 普通 flex 子项，随 kv-row 布局 */
+  align-self: center;       /* 显式：以内容盒（不含底部 padding）为基准垂直居中，与 label 一致 */
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 0;            /* 覆盖全局 .cluster-cap-row 的 margin-top: 8px（详情 Modal 用）——这才是徽标偏下的根因 */
+}
+
+.cluster-kv-row .cluster-cap-badge {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;           /* 消除行高撑高 */
+  vertical-align: middle;   /* 兜底：inline 场景基线对齐 */
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+/* Files table */
+.cluster-col-file-path { width: 30%; }
+.cluster-col-file-db { width: 10%; }
+.cluster-col-file-meas { width: 12%; }
+.cluster-col-file-size { width: 9%; }
+.cluster-col-file-tier { width: 7%; }
+.cluster-col-file-origin { width: 12%; }
+.cluster-col-file-partition { width: 14%; }
+
+.cluster-file-path {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.cluster-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cluster-tier-badge.hot {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+}
+
+.cluster-tier-badge.cold {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+}
+
+/* Pagination */
+.cluster-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.cluster-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cluster-pagination button {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cluster-pagination button:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.cluster-pagination button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Overview detail blocks */
+.cluster-block-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.cluster-block-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cluster-block-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.cluster-kv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-auto-rows: 1fr;   /* 所有行等高（以最高内容行为准），保证各行垂直中心一致 */
+  gap: 8px 24px;
+  margin-top: 12px;      /* 分界线上方间距（与标题栏分隔） */
+  border-top: 1px dashed var(--border-color);   /* 分界线：仅展开（有内容）时显示 */
+  padding-top: 12px;     /* 分界线下方间距（与内容分隔），上下间距一致 */
+}
+
+.cluster-kv-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;   /* 统一垂直居中：任一行被内容撑高时，所有行内容都不偏上 */
+  gap: 12px;
+  font-size: 13px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.cluster-kv-label {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.cluster-kv-value {
+  color: var(--text-primary);
+  font-weight: 500;
+  text-align: right;
+  word-break: break-all;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;   /* 防止内容撑宽 grid 列 */
+}
+
+.cluster-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.cluster-toggle-btn:hover {
+  color: var(--accent-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cluster-chevron {
+  transition: transform 0.2s;
+}
+
+.cluster-chevron.open {
+  transform: rotate(90deg);
+  color: var(--accent-primary);
+}
+
+/* License feature chips（复用 cluster-cap-badge 样式） */
+.cluster-license-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}

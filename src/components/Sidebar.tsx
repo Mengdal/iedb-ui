@@ -44,7 +44,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onNavigate, onSh
   };
 
   useEffect(() => {
-    if (currentView === 'plugins' || currentView === 'plugins-mqtt' || currentView === 'backup') {
+    if (currentView === 'plugins' || currentView === 'plugins-mqtt' || currentView === 'backup' || currentView === 'cluster') {
       setExpandedSections(prev => ({ ...prev, plugins: true }));
     }
     if (currentView === 'rbac' || currentView === 'tokens' || currentView === 'audit-log') {
@@ -100,7 +100,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onNavigate, onSh
       subItems: [
         { id: 'plugins-cq', labelKey: 'nav.continuousQueries', view: 'plugins' },
         { id: 'plugins-mqtt', labelKey: 'nav.mqttSubscriptions', view: 'plugins-mqtt' },
-        { id: 'plugins-backup', labelKey: 'nav.backup', view: 'backup' }
+        { id: 'plugins-backup', labelKey: 'nav.backup', view: 'backup' },
+        { id: 'plugins-cluster', labelKey: 'nav.cluster', view: 'cluster' }
       ]
     },
     { id: 'write-data', labelKey: 'nav.writeData', icon: <Upload size={18} />, view: 'write-data' },

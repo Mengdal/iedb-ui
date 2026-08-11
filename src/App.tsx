@@ -17,6 +17,7 @@ import Tokens from './views/Tokens';
 import Plugins from './views/Plugins';
 import PluginsMqtt from './views/PluginsMqtt';
 import BackupManagement from './views/BackupManagement';
+import ClusterManagement from './views/ClusterManagement';
 import Dashboards from './views/Dashboards';
 import AuditLog from './views/AuditLog';
 import QueryManagement from './views/QueryManagement';
@@ -40,7 +41,8 @@ export type CurrentView =
   | 'help-doc'
   | 'audit-log'
   | 'query-mgmt'
-  | 'backup';
+  | 'backup'
+  | 'cluster';
 
 const VIEW_STORAGE_KEY = 'iotedge-current-view';
 
@@ -126,6 +128,7 @@ function App() {
       case 'plugins': return <Plugins />;
       case 'plugins-mqtt': return <PluginsMqtt />;
       case 'backup': return <BackupManagement />;
+      case 'cluster': return <ClusterManagement />;
       case 'dashboards': return <Dashboards onNavigate={setCurrentView} />;
       case 'audit-log': return <AuditLog />;
       case 'query-mgmt': return <QueryManagement />;
