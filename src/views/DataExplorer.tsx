@@ -1100,10 +1100,31 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
       return sql.replace(customRegex, timeCondition);
     }
 
-    // Only replace existing time conditions. If user's SQL has no time condition,
-    // we respect their intent (e.g. LIMIT 1 "get latest" queries, WHERE path='/' etc.)
-    // and do NOT force-inject a time filter.
-    return sql;
+    // 无既有时间条件 → 注入时间过滤，保证所选时间范围始终生效
+    const upper = sql.toUpperCase();
+    const whereIdx = upper.indexOf('WHERE');
+    const clauseKeywords = ['GROUP BY', 'ORDER BY', 'LIMIT', 'HAVING', 'UNION', 'OFFSET'];
+
+    if (whereIdx !== -1) {
+      // 在现有 WHERE 子句条件末尾追加 AND 时间条件
+      let insertAt = sql.length;
+      let matchedKw = '';
+      for (const kw of clauseKeywords) {
+        const idx = upper.indexOf(kw, whereIdx + 5);
+        if (idx !== -1 && idx < insertAt) { insertAt = idx; matchedKw = kw; }
+      }
+      const head = sql.slice(0, insertAt).trimEnd();
+      const tail = matchedKw ? `\n${sql.slice(insertAt).trimStart()}` : '';
+      return `${head}\n  AND ${timeCondition}${tail}`.replace(/\n\s*\n/g, '\n').trim();
+    }
+
+    // 无 WHERE：在 LIMIT 前插入，或直接追加 WHERE；去掉结尾分号避免产生非法 SQL
+    const stripped = sql.replace(/;\s*$/, '').trimEnd();
+    const limitIdx = upper.indexOf('LIMIT');
+    if (limitIdx !== -1) {
+      return `${stripped.slice(0, limitIdx)}\nWHERE\n  ${timeCondition}\n${stripped.slice(limitIdx)}`.replace(/\n\s*\n/g, '\n').trim();
+    }
+    return `${stripped}\nWHERE\n  ${timeCondition}`.replace(/\n\s*\n/g, '\n').trim();
   };
 
   const handleTimeRangeChange = (val: string) => {
