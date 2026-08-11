@@ -31,6 +31,25 @@ const scenarios = [
   '产品行为分析与增长分析',
 ];
 
+const agentFeatures = [
+  {
+    title: 'Line Protocol 采集',
+    description: '兼容 InfluxDB 行协议，边缘设备通过 HTTP 一键接入，无需改造采集链路。',
+  },
+  {
+    title: 'WAL 持久化',
+    description: '预写日志 + CRC32 完整性校验，崩溃后自动回放，数据不丢失。',
+  },
+  {
+    title: '增量 Parquet 刷写',
+    description: '按时间分块生成 Parquet，支持 HTTP 或 S3 直传，失败自动暂存重试。',
+  },
+  {
+    title: 'ARM 轻量部署',
+    description: '纯 Rust 静态编译，单二进制约 6MB，适配树莓派等资源受限设备。',
+  },
+];
+
 function HomepageHeader() {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
@@ -97,6 +116,34 @@ function ScenarioSection() {
   );
 }
 
+function AgentSection() {
+  return (
+    <section className={styles.section}>
+      <div className="container">
+        <Heading as="h2" className={styles.sectionTitle}>
+          iedb-agent 边缘采集代理
+        </Heading>
+        <p className={styles.agentIntro}>
+          轻量级边缘采集代理，在设备端完成时序数据的采集、缓冲与转发，与 IotEdgeDB 无缝协同。
+        </p>
+        <div className={styles.grid}>
+          {agentFeatures.map((item) => (
+            <article key={item.title} className={styles.card}>
+              <Heading as="h3">{item.title}</Heading>
+              <p>{item.description}</p>
+            </article>
+          ))}
+        </div>
+        <div className={styles.ctaWrap}>
+          <Link className="button button--primary button--lg" to="/docs/集成指南/iedb-agent集成">
+            了解应用
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const {siteConfig} = useDocusaurusContext();
 
@@ -108,6 +155,7 @@ export default function Home() {
       <main>
         <HighlightSection />
         <ScenarioSection />
+        <AgentSection />
       </main>
     </Layout>
   );
