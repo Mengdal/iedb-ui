@@ -6,6 +6,8 @@ import { useApiFetch } from '../hooks/useApiFetch';
 import ConfirmModal from '../components/ConfirmModal';
 import DatabaseRetentionPolicies from './DatabaseRetentionPolicies';
 import DatabaseMeasurements from './DatabaseMeasurements';
+import TieredStoragePanel from './TieredStoragePanel';
+import CompactionPanel from './CompactionPanel';
 import './Databases.css';
 
 interface DatabaseItem {
@@ -33,7 +35,7 @@ function Databases() {
 
   // Detail view
   const [selectedDb, setSelectedDb] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'retention' | 'measurements'>('retention');
+  const [activeTab, setActiveTab] = useState<'retention' | 'measurements' | 'tiered' | 'compaction'>('measurements');
   const [dbMeasurements, setDbMeasurements] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -125,7 +127,7 @@ function Databases() {
       <div className="databases-page">
         <div className="db-detail-header">
           <div className="db-breadcrumb">
-            <button className="db-back-btn" onClick={() => setSelectedDb(null)}>
+            <button className="db-back-btn" onClick={() => { setSelectedDb(null); setActiveTab('measurements'); }}>
               <Database size={16} />
               {t('views.databases.title')}
             </button>
@@ -134,22 +136,38 @@ function Databases() {
           </div>
           <div className="db-tabs">
             <button
+              className={`db-tab-btn ${activeTab === 'measurements' ? 'active' : ''}`}
+              onClick={() => setActiveTab('measurements')}
+            >
+              {t('views.databases.detail.tabMeasurements')}
+            </button>
+            <button
               className={`db-tab-btn ${activeTab === 'retention' ? 'active' : ''}`}
               onClick={() => setActiveTab('retention')}
             >
               {t('views.databases.detail.tabRetention')}
             </button>
             <button
-              className={`db-tab-btn ${activeTab === 'measurements' ? 'active' : ''}`}
-              onClick={() => setActiveTab('measurements')}
+              className={`db-tab-btn ${activeTab === 'tiered' ? 'active' : ''}`}
+              onClick={() => setActiveTab('tiered')}
             >
-              {t('views.databases.detail.tabMeasurements')}
+              {t('views.databases.detail.tabTiered')}
+            </button>
+            <button
+              className={`db-tab-btn ${activeTab === 'compaction' ? 'active' : ''}`}
+              onClick={() => setActiveTab('compaction')}
+            >
+              {t('views.databases.detail.tabCompaction')}
             </button>
           </div>
         </div>
 
         {activeTab === 'retention' ? (
           <DatabaseRetentionPolicies database={selectedDb} measurements={dbMeasurements} />
+        ) : activeTab === 'tiered' ? (
+          <TieredStoragePanel database={selectedDb} />
+        ) : activeTab === 'compaction' ? (
+          <CompactionPanel database={selectedDb} />
         ) : (
           <DatabaseMeasurements database={selectedDb} />
         )}
@@ -218,7 +236,7 @@ function Databases() {
             <div
               key={db.name}
               className="database-card"
-              onClick={() => { setSelectedDb(db.name); setActiveTab('retention'); }}
+              onClick={() => { setSelectedDb(db.name); setActiveTab('measurements'); }}
             >
               <div className="db-card-header">
                 <div className="db-card-icon-container">

@@ -7,7 +7,7 @@ export function formatTime(ts: string | number | null | undefined, locale?: stri
   try {
     return new Date(ts).toLocaleString(locale, {
       dateStyle: 'medium',
-      timeStyle: 'short',
+      timeStyle: 'medium', // 精确到秒
     });
   } catch {
     return String(ts);

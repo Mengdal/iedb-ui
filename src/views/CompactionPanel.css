@@ -1,0 +1,76 @@
+/* ===================== Compaction Panel (压缩管理) ===================== */
+
+/* ---- 状态栏内调度器分组 ---- */
+.cm-sched-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cm-sched-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+/* ---- 主体 ---- */
+.cm-body {
+  padding-top: 16px;
+}
+
+/* ---- 统计弹窗：列表形式 ---- */
+.cp-stat-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.cp-stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.cp-stat-row:last-child {
+  border-bottom: none;
+}
+
+.cp-stat-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.cp-stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ---- 区块 ---- */
+.cm-section {
+  margin-bottom: 24px;
+}
+
+.cm-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.cm-count-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-secondary);
+}

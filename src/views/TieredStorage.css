@@ -1,0 +1,428 @@
+/* ===================== Tiered Storage (冷热分层) ===================== */
+
+/* ---- 整页锁定：页面不滚动，只有迁移历史表格区域内部滚动 ---- */
+.ts-root {
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ts-flex-col {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ts-scroll-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ---- 固定头部（标题行钉在滚动体顶部，上下间距一致 16px） ---- */
+.ts-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg-surface);
+  margin-bottom: 16px;
+}
+
+/* 覆盖 PageLayout 的 .section-header margin-bottom: 20px，保持上下间隔一致 */
+.ts-sticky-header .section-header {
+  margin-bottom: 0;
+}
+
+/* ---- 全局状态总览 Bar（与保留策略 rp-scheduler-bar 完全一致） ---- */
+/* margin-bottom 23px + 边框 1px = 视觉 24px，与上方 db-tabs 的 24px gap 一致 */
+.ts-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  margin: 0 0 23px 0;
+  background: var(--surface-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.ts-status-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.ts-status-label {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ts-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ts-status-badge.on {
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+}
+
+.ts-status-badge.off {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.ts-status-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border-color);
+  margin: 0; /* 两侧间距由 flex gap 统一控制（10px），与调度规则等项一致 */
+}
+
+.ts-status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.ts-status-backend {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.ts-status-detail {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.ts-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  background: rgba(148, 163, 184, 0.15); /* 中性底色，不区分 hot/cold */
+  color: var(--text-secondary);
+}
+
+/* ---- bar 右侧操作区（策略设置入口） ---- */
+.ts-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ts-policy-form-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+}
+
+.ts-policy-form-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+
+/* ---- 策略弹窗：信息区与配置区分隔 ---- */
+.ts-policy-info {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.ts-policy-info-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.ts-policy-info .rp-result-grid {
+  margin-top: 0 !important;
+}
+
+.ts-policy-config {
+  border-top: 1px solid var(--border-color);
+  padding-top: 16px;
+}
+
+
+/* ---- 区块 ---- */
+.ts-section {
+  margin-bottom: 24px;
+}
+
+/* 数据文件弹窗加载占位：与表格高度相当，避免切换页签时内容高度骤变造成闪屏 */
+.ts-files-loading {
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* ---- 文件列表 ---- */
+.ts-files-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+/* 数据文件展开按钮 active 态 */
+.btn-active {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+/* ---- 数据文件弹窗 ---- */
+.ts-files-modal {
+  width: min(960px, 94vw);
+}
+
+.ts-files-modal-body {
+  max-height: 68vh;
+  overflow-y: auto;
+  overscroll-behavior: contain; /* 滚动到边界时不传递给祖先滚动容器，防止背景跟着滚动 */
+}
+
+.ts-files-toolbar .page-search {
+  width: 220px;
+  margin: 0;
+}
+
+.ts-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.ts-tab {
+  padding: 4px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ts-tab:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.ts-tab.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.ts-direction-arrow {
+  color: var(--text-secondary);
+  margin: 0 4px;
+  font-size: 12px;
+}
+
+/* 表头与内容居中（迁移历史 / 数据文件列表共用） */
+/* 双类选择器确保覆盖 tokens-table 的 text-align: left */
+.tokens-table.ts-center-table th,
+.tokens-table.ts-center-table td {
+  text-align: center;
+}
+
+/* 迁移历史：文件位置列（超长截断，hover 显示完整路径） */
+.ts-file-path {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--ifm-font-family-monospace, monospace);
+  font-size: 12px;
+}
+
+/* ---- 迁移结果通知 Toast（参考 saved-toast：右下角，5s 自动消失） ---- */
+.ts-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 12px 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 1100;
+  animation: tsToastIn 0.3s ease;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.ts-toast-success {
+  border-color: #22c55e;
+}
+
+.ts-toast-success svg {
+  color: #22c55e;
+  flex-shrink: 0;
+}
+
+.ts-toast-error {
+  border-color: #ef4444;
+}
+
+.ts-toast-error svg {
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+@keyframes tsToastIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ts-migration-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #22c55e;
+  font-size: 12px;
+}
+
+.ts-migration-failed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #ef4444;
+  font-size: 12px;
+}
+
+.ts-scan-errors {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #f59e0b;
+}
+
+/* ---- 分页行（文件列表） ---- */
+.rp-pagination-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 10px 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.rp-page-size-select {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+/* ---- 文件数上限（后端 limit 参数） ---- */
+.ts-file-limit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ts-file-limit-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.ts-file-limit-select {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+/* ---- 迁移进行中覆盖层 ---- */
+.ts-migrating-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ts-migrating-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 28px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--accent-primary);
+  max-width: 420px;
+  text-align: center;
+}
+
+.ts-migrating-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ts-migrating-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+@media screen and (max-width: 996px) {
+  .ts-status-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ts-status-actions {
+    justify-content: flex-start;
+  }
+}

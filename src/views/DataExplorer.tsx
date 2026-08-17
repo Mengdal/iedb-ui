@@ -3,8 +3,8 @@ import { Play, History, Plus, Database, Table2, LineChart, BarChart2, Search, Do
 import ReactECharts from 'echarts-for-react';
 import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { sql, type SQLConfig } from '@codemirror/lang-sql';
-import { Compartment } from '@codemirror/state';
-import { gutter, GutterMarker, ViewPlugin, lineNumbers } from '@codemirror/view';
+import { Compartment, Prec } from '@codemirror/state';
+import { gutter, GutterMarker, ViewPlugin, lineNumbers, keymap } from '@codemirror/view';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import i18n from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -812,6 +812,9 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
     aiGutterCompartment.of(createAiGutter()),
     lineNumbers(),
     aiGutterClickPlugin,
+    // 覆盖 CodeMirror 默认 keymap 的 Mod-Enter(insertBlankLine)：阻止插入空行，
+    // 查询执行由全局 keydown 监听处理（事件仍会冒泡到 document，不重复触发）
+    Prec.highest(keymap.of([{ key: 'Mod-Enter', run: () => true }])),
   ], []);
 
   // Dynamically update the SQL schema/table when cmSchema or expanded table changes
