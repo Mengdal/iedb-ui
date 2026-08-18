@@ -34,7 +34,13 @@ export function useApiFetch(options: ApiFetchOptions = {}) {
   const apiFetch = useCallback(async (path: string, init?: RequestInit & { raw?: boolean }) => {
     if (!activeServer) throw new Error('No active server');
 
-    const res = await serverFetch(baseUrl, path, init, activeServer.token);
+    let res: Response;
+    try {
+      res = await serverFetch(baseUrl, path, init, activeServer.token);
+    } catch {
+      // 网络层失败：连不上服务器 / URL 不可达
+      throw new Error('Connection failed. Please check the server URL and network.');
+    }
 
     if (handleLicense && (res.status === 403 || res.status === 503)) {
       const newGate = { noLicense: true, featureNotEnabled: false };
@@ -53,6 +59,10 @@ export function useApiFetch(options: ApiFetchOptions = {}) {
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      // 鉴权失败：给出清晰提示，便于用户排查（参考其他功能的 401 处理）
+      if (res.status === 401) {
+        throw new Error('Authentication required');
+      }
       throw new Error((data as any)?.error || `Request failed: ${res.status}`);
     }
     return data;

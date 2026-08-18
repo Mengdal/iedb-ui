@@ -526,6 +526,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
   const [tableSearch, setTableSearch] = useState('');
   const [tableColumns, setTableColumns] = useState<Record<string, string[]>>({});
   const [tableSchemas, setTableSchemas] = useState<Record<string, { tags: string[], fields: string[], types: Record<string, string> }>>({});
+  const [schemaErrors, setSchemaErrors] = useState<Record<string, string>>({});
 
   const [tabs, setTabs] = useState<QueryTab[]>(() => {
     if (_cachedTabs) return _cachedTabs;
@@ -648,6 +649,7 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
   const [isQuerying, setIsQuerying] = useState(false);
   const [isRefreshingDbs, setIsRefreshingDbs] = useState(false);
   const [isLoadingDbs, setIsLoadingDbs] = useState(false);
+  const [dbsError, setDbsError] = useState('');
   const [showTimeModal, setShowTimeModal] = useState(false);
 
   // Ref to access the CodeMirror EditorView for dynamic extension reconfiguration
@@ -727,13 +729,16 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
   useEffect(() => {
     if (!activeServer) return;
     setIsLoadingDbs(true);
+    setDbsError('');
     apiFetch('/api/v1/databases')
       .then(data => {
         if (data && (data as any).databases) {
           setDatabases((data as any).databases);
         }
       })
-      .catch(console.error)
+      .catch((err) => {
+        setDbsError(err?.message || t('views.dataExplorer.dbLoadFailed'));
+      })
       .finally(() => setIsLoadingDbs(false));
   }, [activeServer, apiFetch]);
 
@@ -761,10 +766,12 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
                     if (cols.length > 0) {
                       setTableColumns(prev => ({ ...prev, [m.name]: cols }));
                       setTableSchemas(prev => ({ ...prev, [m.name]: { tags, fields, types } }));
-                    }
-                  }
-                })
-                .catch(() => { }); // silent catch for background prefetch
+                      }
+                      }
+                      })
+                      .catch((err) => {
+                      setSchemaErrors(prev => ({ ...prev, [m.name]: (err && err.message) || t('views.dataExplorer.schemaLoadFailed') }));
+                      });
             }
           });
         }
@@ -986,7 +993,9 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
               }
             }
           })
-          .catch(console.error);
+          .catch((err) => {
+            setSchemaErrors(prev => ({ ...prev, [tableName]: (err && err.message) || t('views.dataExplorer.schemaLoadFailed') }));
+          });
       }
     }
   };
@@ -1470,11 +1479,11 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
             value={selectedDb}
             onChange={(e) => setSelectedDb(e.target.value)}
           >
-            <option value="">{t('views.dataExplorer.noDatabaseSelected')}</option>
+            <option value="">{dbsError || t('views.dataExplorer.noDatabaseSelected')}</option>
             {databases.map(db => (
               <option key={db.name} value={db.name}>{db.name}</option>
             ))}
-            {databases.length === 0 && <option value="">{t('views.dataExplorer.loading')}</option>}
+            {databases.length === 0 && !dbsError && <option value="">{t('views.dataExplorer.loading')}</option>}
           </select>
         </div>
 
@@ -1541,6 +1550,8 @@ const DataExplorer: React.FC<DataExplorerProps> = ({ onNavigate }) => {
                         </div>
                       );
                     })
+                  ) : schemaErrors[activeTab.expandedTable] ? (
+                    <div className="tree-leaf tokens-alert" style={{ margin: '4px 0' }}>{schemaErrors[activeTab.expandedTable]}</div>
                   ) : (
                     <div className="tree-leaf" style={{ opacity: 0.5 }}>{t('views.dataExplorer.loading')}</div>
                   )}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useServers } from './contexts/ServerContext';
-import { Database, Plus } from 'lucide-react';
+import { Database, Plus, Zap } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import TopNav from './components/TopNav';
 import WelcomeModal from './components/WelcomeModal';
@@ -48,7 +48,7 @@ const VIEW_STORAGE_KEY = 'iotedge-current-view';
 
 function App() {
   const { t, i18n } = useTranslation();
-  const { servers } = useServers();
+  const { servers, addServer } = useServers();
 
   const [currentView, setCurrentView] = useState<CurrentView>(() => {
     try {
@@ -84,6 +84,17 @@ function App() {
     });
   }, []);
 
+  // 一键创建默认本地服务器（localhost:8000，无 token）；addServer 会自动选中
+  const handleQuickAddDefaultServer = () => {
+    addServer({
+      name: 'Local',
+      protocol: 'http://',
+      host: 'localhost:8000',
+      token: '',
+    });
+    setCurrentView('overview');
+  };
+
   const handleCloseWelcome = () => {
     setShowWelcome(false);
     try {
@@ -106,10 +117,20 @@ function App() {
             <p style={{ color: 'var(--text-secondary)', fontSize: '15px', lineHeight: 1.5, marginBottom: '24px' }}>
               {t('views.databases.noServerDesc')}
             </p>
-            <button className="btn btn-primary" onClick={() => setCurrentView('servers')}>
-              <Plus size={16} />
-              {t('nav.configure')} {t('nav.servers')}
-            </button>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-primary"
+                onClick={handleQuickAddDefaultServer}
+                title={t('views.servers.quickAddDefaultHint', '创建 localhost:8000 的本地服务器')}
+              >
+                <Zap size={16} />
+                {t('views.servers.quickAddDefault', '快速连接本地服务')}
+              </button>
+              <button className="btn btn-secondary" onClick={() => setCurrentView('servers')}>
+                <Plus size={16} />
+                {t('views.servers.addServer')}
+              </button>
+            </div>
           </div>
         </div>
       );

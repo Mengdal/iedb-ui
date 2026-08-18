@@ -164,6 +164,7 @@ const ClusterManagement: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [clusterError, setClusterError] = useState('');
 
   const [detailNode, setDetailNode] = useState<LocalNode | null>(null);
   const [removeTarget, setRemoveTarget] = useState<ClusterNode | null>(null);
@@ -179,9 +180,16 @@ const ClusterManagement: React.FC = () => {
     if (!activeServer) return;
     try {
       const data = await apiJson('/api/v1/cluster');
-      if (data) setCluster(data as ClusterStatus);
+      if (data) {
+        setCluster(data as ClusterStatus);
+        setClusterError('');
+      }
     } catch (err: any) {
-      if (!noLicense) showError(err.message || t('views.cluster.failedToLoad'));
+      if (!noLicense) {
+        const msg = err.message || t('views.cluster.failedToLoad');
+        showError(msg);
+        setClusterError(msg);
+      }
     }
   };
 
@@ -749,10 +757,14 @@ const ClusterManagement: React.FC = () => {
         )}
 
         {activeServer && !noLicense && !isLoading && !cluster && (
-          <div className="loading-inline">
-            <Loader2 className="spin" size={18} />
-            {t('views.cluster.loading')}
-          </div>
+          clusterError ? (
+            <div className="tokens-alert">{clusterError}</div>
+          ) : (
+            <div className="loading-inline">
+              <Loader2 className="spin" size={18} />
+              {t('views.cluster.loading')}
+            </div>
+          )
         )}
 
         {activeServer && !noLicense && cluster && !cluster.enabled && (
