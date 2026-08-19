@@ -35,6 +35,7 @@ import {
   Shield,
   Sliders,
   Timer,
+  Plus,
   Trash2,
   Upload,
   Wifi,
@@ -45,6 +46,7 @@ import { useTranslation } from 'react-i18next';
 import { useApiFetch } from '../hooks/useApiFetch';
 import { usePolling } from '../hooks/usePolling';
 import { formatTime } from '../utils/formatTime';
+import type { CurrentView } from '../App';
 import TimeseriesCharts from './TimeseriesCharts';
 import ApplicationLogs from './ApplicationLogs';
 import './SystemOverview.css';
@@ -119,8 +121,8 @@ const CollapsibleSection: React.FC<{ title: string; children: React.ReactNode }>
   );
 };
 
-const SystemOverview: React.FC = () => {
-  const { activeServer } = useServers();
+const SystemOverview: React.FC<{ onNavigate?: (view: CurrentView) => void }> = ({ onNavigate }) => {
+  const { activeServer, addServer } = useServers();
   const { apiFetch } = useApiFetch({ handleLicense: false, handleFeature: false });
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(false);
@@ -147,7 +149,28 @@ const SystemOverview: React.FC = () => {
     return (
       <div className="overview-container" style={{ textAlign: 'center', paddingTop: '100px' }}>
         <h2>{t('views.systemOverview.noServerTitle')}</h2>
-        <p style={{ color: 'var(--text-secondary)' }}>{t('views.systemOverview.noServerHint')}</p>
+        <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>{t('views.systemOverview.noServerHint')}</p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              addServer({
+                name: 'Local',
+                protocol: 'http://',
+                host: 'localhost:8000',
+                token: '',
+              });
+            }}
+            title={t('views.servers.quickAddDefaultHint', '创建 localhost:8000 的本地服务器')}
+          >
+            <Zap size={16} />
+            {t('views.servers.quickAddDefault', '快速连接本地服务')}
+          </button>
+          <button className="btn btn-secondary" onClick={() => onNavigate?.('servers')}>
+            <Plus size={16} />
+            {t('views.servers.addServer', '添加服务器')}
+          </button>
+        </div>
       </div>
     );
   }

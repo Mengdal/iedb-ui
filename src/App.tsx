@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useServers } from './contexts/ServerContext';
-import { Database, Plus, Zap } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import TopNav from './components/TopNav';
 import WelcomeModal from './components/WelcomeModal';
@@ -48,15 +47,15 @@ const VIEW_STORAGE_KEY = 'iotedge-current-view';
 
 function App() {
   const { t, i18n } = useTranslation();
-  const { servers, addServer } = useServers();
+  const { servers } = useServers();
 
   const [currentView, setCurrentView] = useState<CurrentView>(() => {
     try {
       const stored = localStorage.getItem(VIEW_STORAGE_KEY) as CurrentView | null;
-      if (!stored && servers.length === 0) return 'servers';
+      if (!stored && servers.length === 0) return 'overview';
       return stored || 'overview';
     } catch {
-      if (servers.length === 0) return 'servers';
+      if (servers.length === 0) return 'overview';
       return 'overview';
     }
   });
@@ -84,17 +83,6 @@ function App() {
     });
   }, []);
 
-  // 一键创建默认本地服务器（localhost:8000，无 token）；addServer 会自动选中
-  const handleQuickAddDefaultServer = () => {
-    addServer({
-      name: 'Local',
-      protocol: 'http://',
-      host: 'localhost:8000',
-      token: '',
-    });
-    setCurrentView('overview');
-  };
-
   const handleCloseWelcome = () => {
     setShowWelcome(false);
     try {
@@ -105,39 +93,8 @@ function App() {
   };
 
   const renderView = () => {
-    const hasNoServers = servers.length === 0;
-    const isConfigRoute = currentView === 'servers' || currentView === 'integrations' || currentView === 'help-doc';
-
-    if (hasNoServers && !isConfigRoute) {
-      return (
-        <div style={{ padding: '60px 20px', maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
-          <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '40px' }}>
-            <Database size={48} color="#3b82f6" style={{ marginBottom: 16 }} />
-            <h2 style={{ fontSize: '24px', fontWeight: 600, margin: '0 0 12px 0' }}>{t('views.databases.noServer')}</h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '15px', lineHeight: 1.5, marginBottom: '24px' }}>
-              {t('views.databases.noServerDesc')}
-            </p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button
-                className="btn btn-primary"
-                onClick={handleQuickAddDefaultServer}
-                title={t('views.servers.quickAddDefaultHint', '创建 localhost:8000 的本地服务器')}
-              >
-                <Zap size={16} />
-                {t('views.servers.quickAddDefault', '快速连接本地服务')}
-              </button>
-              <button className="btn btn-secondary" onClick={() => setCurrentView('servers')}>
-                <Plus size={16} />
-                {t('views.servers.addServer')}
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
     switch (currentView) {
-      case 'overview': return <SystemOverview />;
+      case 'overview': return <SystemOverview onNavigate={setCurrentView} />;
       case 'data-explorer': return <DataExplorer onNavigate={setCurrentView} />;
       case 'servers': return <Servers />;
       case 'integrations': return <Integrations />;
